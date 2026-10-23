@@ -1,6 +1,6 @@
 # Working on Open Remote
 
-This repository is currently local-only. Do not add a remote, push, publish packages, or upload manufacturing files until the owner requests it. Open-source publication is the intent; licenses have not yet been selected.
+The source is public at <https://github.com/heidihowilson/open-remote>. Do not publish packages or upload manufacturing files until the owner requests it. Licenses have not yet been selected.
 
 ## Development
 

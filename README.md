@@ -10,7 +10,9 @@ The Waveshare C6 runs a USB-powered BLE remote, controlled from a phone over its
 
 The board passed report-map, command rejection, advertising and seven onboard HTTP checks; four host panel tests also passed. Reconnection, standby, battery life, the living-room QM6K and Apple TVs remain unverified. There is no custom PCB or printable enclosure yet.
 
-**Next milestone:** physical buttons and a handheld fit prototype. Choc V1 switches have been ordered and are expected in about a week; compatible Glove80 MCC keycaps are already available. Exact order quantities and variants are not recorded.
+Firmware v0.3 adds debounced input from ten wired switches; see [physical keys](firmware/README.md#physical-keys). It compiles but has not yet run on the board.
+
+**Next milestone:** wire the first switch to OK, then a handheld fit prototype. Choc V1 switches have been ordered and are expected in about a week; compatible Glove80 MCC keycaps are already available. Exact order quantities and variants are not recorded.
 
 ## Local development
 
@@ -24,7 +26,7 @@ uv run --with pyserial==3.5 python -m unittest discover -s tests -v
 
 Setup installs the pinned ESP-IDF v6.1 checkout and C6 toolchain under ignored `local/`. Build and tests do not flash the board. See [firmware setup and controls](firmware/README.md) for flashing and pairing, and [contribution notes](CONTRIBUTING.md) for workflow and test limitations.
 
-This repository is local-only. No remote or publication is intended until explicitly requested. Device credentials, backups, logs and installed tools are excluded from Git.
+Device credentials, backups, logs and installed tools are excluded from Git.
 
 ## First build
 

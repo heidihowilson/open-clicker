@@ -1,6 +1,6 @@
 # Phone and USB controlled BLE remote prototype
 
-This application targets the Waveshare ESP32-C6-DEV-KIT-N8-M. It exposes a Bluetooth LE keyboard report and a consumer-control report, with deliberate commands from the UART console or a phone page hosted on the C6. Portable test mode creates a password-protected Wi-Fi access point; it does not join your home network. No mechanical buttons, infrared driver, or battery management are implemented yet.
+This application targets the Waveshare ESP32-C6-DEV-KIT-N8-M. It exposes a Bluetooth LE keyboard report and a consumer-control report, with deliberate commands from the UART console, a phone page hosted on the C6, or wired switches. Portable test mode creates a password-protected Wi-Fi access point; it does not join your home network. No infrared driver or battery management is implemented yet.
 
 ## Build
 
@@ -42,7 +42,7 @@ This is a temporary testing interface. Wi-Fi and BLE run together with ESP-IDF s
 4. Wait for authenticated status, then test individual directions and OK.
 5. Test Back, Home, and Play/Pause separately in the launcher and a playback app. Escape and Space are alternative test commands, not automatic fallbacks.
 
-Input is discarded when disconnected or unauthenticated. Each click sends a 60 ms press and a release. A release is retried once on transport failure, and stale input is not replayed into a new connection. A successful transmission is not a TV acknowledgment. Held-key repeats are not implemented yet.
+Input is discarded when disconnected or unauthenticated. Each click sends a 60 ms press and a release. A release is retried once on transport failure, and stale input is not replayed into a new connection. A successful transmission is not a TV acknowledgment. The phone page and serial console send single taps; held-key repeats exist only for wired direction keys.
 
 The initial pairing interaction uses the phone or computer for passkey entry; it does not yet solve the final screenless remote's pairing interaction. Bonds are stored by the Bluetooth stack. After a restart or disconnect, explicitly open pairing again to advertise/reconnect; unattended reconnection is not implemented.
 
@@ -62,7 +62,34 @@ The USB-powered bench fixture reports 100 percent through the HID battery servic
 | volume_up/down | Consumer 0xE9/0xEA | Volume candidates |
 | mute | Consumer 0xE2 | Mute candidate |
 
-Home and Back passed in the owner-reported [first TV test](../docs/tests/2026-10-22-first-tv-test.md); the target was the bedroom TCL BeyondTV4, and other targets remain unverified. A/B keys are not implemented or mapped to literal letters.
+Home and Back passed in the owner-reported [first TV test](../docs/tests/2026-10-22-first-tv-test.md); the target was the bedroom TCL BeyondTV4, and other targets remain unverified. A and B are unassigned by default and never send literal letters; see [physical keys](#physical-keys).
+
+## Physical keys
+
+Firmware v0.3 reads ten independent switches. Wire one leg of each switch to the listed pin and the other leg to any GND pin. Internal pull-ups make a press read low; no resistors or diodes are needed. Pins come from the Waveshare ESP32-C6-DEV-KIT-N8 schematic. Strapping pins (4, 5, 8, 9, 15), native USB (12, 13) and the console UART (16, 17) are deliberately unused. GPIO 0, 1, 6 and 7 remain spare.
+
+Header positions count from pin 1 at the USB end; `P1` is the 3V3/5V side and `P2` is the TX/RX side.
+
+| Key | GPIO | Header | Action | Repeats when held |
+| --- | --- | --- | --- | --- |
+| OK | 18 | P2-10 | ok | No |
+| Up | 19 | P2-9 | up | Yes |
+| Down | 20 | P2-8 | down | Yes |
+| Left | 21 | P2-7 | left | Yes |
+| Right | 22 | P2-6 | right | Yes |
+| Back | 23 | P2-5 | back | No |
+| Home | 10 | P1-10 | home | No |
+| Play/Pause | 11 | P1-11 | play | No |
+| A | 2 | P1-12 | unassigned | No |
+| B | 3 | P1-13 | unassigned | No |
+
+GND is available at P1-15, P2-1, P2-12 and P2-15. The cluster of directions, OK and Back sits on P2 next to ground.
+
+Inputs are sampled every 5 ms and must be stable for 20 ms. A press sends the same 60 ms tap as the phone page, so no key can stick down across a disconnect. Direction keys repeat after 400 ms, then every 150 ms. A press is dropped, not queued, while an earlier tap is still sending. A key that is held or shorted at startup does nothing until it is released.
+
+Every debounced edge prints `KEY <name> pressed` or `released` on the serial console, even when no TV is connected. That makes the first switch testable on the bench without pairing. `keys` prints the map and live state of each input.
+
+Assign A or B to any action in the command table with `map a mute` or `map b volume_up`; `map a none` clears it. Assignments persist in NVS. Long-press OK (Android context menus) is not supported, because OK sends a tap on press.
 
 ## Verification
 
@@ -74,7 +101,7 @@ uv run --with pyserial python -m unittest discover -s tests -v
 
 They verify command delivery, invalid-command rejection, origin/token enforcement, and status display. Compilation and device startup checks are distinct from actual TV compatibility. Record real-device results using the project test template.
 
-The serial command `webcheck` tests the actual onboard HTTP server through local TCP: page/token substitution, status, missing-token rejection, malformed commands, origin rejection, and queueing a harmless Stop pairing command. It does not test phone Wi-Fi reception or TV Bluetooth behavior.
+The serial command `webcheck` tests the actual onboard HTTP server through local TCP: page/token substitution, status, missing-token rejection, malformed commands, origin rejection, and queueing a harmless Stop pairing command. It does not test phone Wi-Fi reception or TV Bluetooth behavior. It closes the pairing window and blocks the command loop for about 20–25 seconds, so it is a bench diagnostic, not a passive status query.
 
 ## Restore
 

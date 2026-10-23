@@ -25,4 +25,4 @@ The project intends genuine open hardware, including editable sources and permis
 
 Before a commercial pilot, determine destination markets and review applicable radio/product requirements and battery handling/shipping obligations for the actual configuration. Track the chosen radio module's integration conditions in the design record.
 
-No custom PCBs have been ordered and no repository has been published. Existing C6 development hardware passed bench checks and an owner-reported TV control test. Choc V1 switches are ordered for the next physical prototype; production hardware validation remains outstanding.
+No custom PCBs have been ordered. The source repository is public; no license has been selected. Existing C6 development hardware passed bench checks and an owner-reported TV control test. Choc V1 switches are ordered for the next physical prototype; production hardware validation remains outstanding.

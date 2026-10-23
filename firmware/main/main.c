@@ -15,6 +15,7 @@
 #include "esp_gatts_api.h"
 #include "esp_hidd.h"
 #include "portable.h"
+#include "keys.h"
 
 #define NAME "Open Remote C6"
 static const char *TAG = "remote";
@@ -133,6 +134,10 @@ static const action_t actions[] = {
     {"back",2,0x224}, {"home",2,0x223}, {"play",2,0xCD},
     {"volume_up",2,0xE9}, {"volume_down",2,0xEA}, {"mute",2,0xE2}
 };
+static bool action_known(const char *name) {
+    for(size_t i=0;i<sizeof(actions)/sizeof(actions[0]);i++) if(!strcmp(name,actions[i].name)) return true;
+    return false;
+}
 static void send_action(const action_t *a) {
     if(!connected || !authenticated) { result("ERR not authenticated; action discarded"); return; }
     int before=generation;
@@ -178,7 +183,11 @@ static void command(const char *line) {
     if(!strcmp(line,"webcheck")) {
         portable_check();
     } else if(!strcmp(line,"help")) {
-        puts("Commands: status, pair, stop, pin <6 digits>, yes, no, up, down, left, right, ok, back, escape, home, play, space, volume_up, volume_down, mute");
+        puts("Commands: status, keys, map a|b <action>|none, pair, stop, pin <6 digits>, yes, no, up, down, left, right, ok, back, escape, home, play, space, volume_up, volume_down, mute");
+    } else if(!strcmp(line,"keys")) {
+        keys_report();
+    } else if(!strncmp(line,"map ",4)) {
+        keys_map(line);
     } else if(!strcmp(line,"status")) {
         printf("STATUS name=%s connected=%d authenticated=%d advertising=%d ready=%d bonds=%d\n",NAME,(int)connected,(int)authenticated,(int)advertising,(int)(hid_ready&&adv_ready&&scan_ready),esp_ble_get_bond_device_num());
     } else if(!strcmp(line,"pair")) {
@@ -247,11 +256,14 @@ void app_main(void) {
     ESP_ERROR_CHECK(esp_hidd_dev_init(&hid_config,ESP_HID_TRANSPORT_BLE,hid_event,&device));
     ESP_ERROR_CHECK(esp_hidd_dev_battery_set(device,100)); /* USB-powered bench fixture, not a battery reading. */
     portable_start();
-    puts("OPEN_REMOTE_READY v0.2; USB powered; phone Wi-Fi test mode; no automatic keys; type help");
+    keys_start(action_known);
+    puts("OPEN_REMOTE_READY v0.3; USB powered; phone Wi-Fi test mode; physical keys on GPIO; type help");
     char line[80]; size_t n=0; bool overflow=false;
     while(1) {
         char web_command[32];
         if(portable_next(web_command)) command(web_command);
+        char key_action[16];
+        if(keys_next(key_action)) command(key_action);
         int c=getchar();
         if(c!=EOF) {
             if(c=='\n' || c=='\r') {
