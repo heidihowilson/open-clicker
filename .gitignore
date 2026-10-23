@@ -1,0 +1,13 @@
+local/
+.DS_Store
+firmware/build/
+firmware/sdkconfig
+firmware/sdkconfig.old
+**/__pycache__/
+
+# Local Python environments and credentials
+.venv/
+*.py[cod]
+.env
+.env.*
+!.env.example
