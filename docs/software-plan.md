@@ -31,6 +31,10 @@ The passkey path through the phone page does not exist on a finished remote. Pro
 
 The phone Wi-Fi page is a bench tool, and Wi-Fi costs too much power for normal use. Candidates for remapping and firmware updates: a Bluetooth settings service used from a browser, or USB serial. Decide after profiles and sleep work.
 
+## Status
+
+- 2026-10-22: firmware v0.4 implements profiles, key-combination selection and pairing, and reconnect-on-press with the stale-key guard. Bench checks pass on the C6; no TV has been tested with profiles yet.
+
 ## Order of work
 
 1. Profiles with separate identities, and pairing by key combination.

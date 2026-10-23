@@ -10,10 +10,11 @@
 #include "nvs.h"
 #include "keys.h"
 
-#define POLL_MS 5
-#define STABLE_SAMPLES 4  /* 20 ms debounce */
+#define POLL_MS 10  /* one FreeRTOS tick at the default 100 Hz; a shorter delay rounds to zero */
+#define STABLE_SAMPLES 2  /* 20 ms debounce */
 #define REPEAT_DELAY_MS 400
 #define REPEAT_EVERY_MS 150
+#define PAIR_HOLD_MS 3000
 
 typedef struct {
     const char *name; gpio_num_t gpio; const char *header; bool repeat;
@@ -45,6 +46,21 @@ static void emit(button_t *k) {
     /* Drop rather than queue: a backlog would replay stale navigation. */
     if(xQueueSend(pressed,action,0)!=pdTRUE) printf("KEY %s dropped; previous action still sending\n",k->name);
 }
+static void send(const char *action) {
+    if(xQueueSend(pressed,action,0)!=pdTRUE) printf("KEY %s dropped; previous action still sending\n",action);
+}
+/* Home doubles as the profile modifier: Home + Up/Right/Down/Left selects profile 1-4, and
+ * holding the pair for 3 s re-pairs that profile. Plain Home is sent on release. */
+static button_t *home;
+static bool home_chorded;
+static int chord_profile, chord_ms;
+static int arrow_profile(const button_t *k) {
+    if(!strcmp(k->name,"up")) return 1;
+    if(!strcmp(k->name,"right")) return 2;
+    if(!strcmp(k->name,"down")) return 3;
+    if(!strcmp(k->name,"left")) return 4;
+    return 0;
+}
 static void poll(void *arg) {
     TickType_t wake=xTaskGetTickCount();
     while(1) {
@@ -55,12 +71,26 @@ static void poll(void *arg) {
             else if(++k->count>=STABLE_SAMPLES) {
                 k->down=raw; k->count=0; k->held_ms=0;
                 printf("KEY %s %s\n",k->name,raw?"pressed":"released");
-                if(raw) emit(k);
+                int profile=arrow_profile(k);
+                if(k==home) {
+                    if(raw) home_chorded=false;
+                    else if(!home_chorded) emit(k);
+                    chord_profile=0;
+                } else if(raw && home->down && profile) {
+                    char action[16]; snprintf(action,sizeof(action),"profile %d",profile);
+                    home_chorded=true; chord_profile=profile; chord_ms=0;
+                    send(action);
+                } else if(!raw && profile==chord_profile) chord_profile=0;
+                else if(raw && !home->down) emit(k);
             }
-            if(k->down && k->repeat) {
+            if(k->down && k->repeat && !home->down) {
                 k->held_ms+=POLL_MS;
                 if(k->held_ms>=REPEAT_DELAY_MS && (k->held_ms-REPEAT_DELAY_MS)%REPEAT_EVERY_MS==0) emit(k);
             }
+        }
+        if(chord_profile && home->down && (chord_ms+=POLL_MS)==PAIR_HOLD_MS) {
+            char action[16]; snprintf(action,sizeof(action),"profile pair %d",chord_profile);
+            send(action);
         }
         vTaskDelayUntil(&wake,pdMS_TO_TICKS(POLL_MS));
     }
@@ -83,6 +113,7 @@ void keys_start(keys_action_check_t check) {
         }
         nvs_close(nvs);
     }
+    for(size_t i=0;i<KEY_COUNT;i++) if(!strcmp(keys[i].name,"home")) home=&keys[i];
     uint64_t mask=0;
     for(size_t i=0;i<KEY_COUNT;i++) mask|=1ULL<<keys[i].gpio;
     gpio_config_t config={.pin_bit_mask=mask,.mode=GPIO_MODE_INPUT,.pull_up_en=GPIO_PULLUP_ENABLE,.pull_down_en=GPIO_PULLDOWN_DISABLE,.intr_type=GPIO_INTR_DISABLE};

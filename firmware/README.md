@@ -36,15 +36,15 @@ This is a temporary testing interface. Wi-Fi and BLE run together with ESP-IDF s
 
 ## Pair and test
 
-1. Click Start pairing. The board advertises as **Open Remote C6** for two minutes.
+1. Choose a profile, then tap **Pair this profile**. The board advertises as **Open Remote N** for two minutes.
 2. On the TCL, select Settings → Remote & Accessories → Pair remote or accessory.
-3. Select Open Remote C6. If a six-digit code appears, submit it in the panel. If numeric comparison is requested instead, confirm only matching codes.
+3. Select Open Remote N. If a six-digit code appears, submit it in the panel. If numeric comparison is requested instead, confirm only matching codes.
 4. Wait for authenticated status, then test individual directions and OK.
 5. Test Back, Home, and Play/Pause separately in the launcher and a playback app. Escape and Space are alternative test commands, not automatic fallbacks.
 
 Input is discarded when disconnected or unauthenticated. Each click sends a 60 ms press and a release. A release is retried once on transport failure, and stale input is not replayed into a new connection. A successful transmission is not a TV acknowledgment. The phone page and serial console send single taps; held-key repeats exist only for wired direction keys.
 
-The initial pairing interaction uses the phone or computer for passkey entry; it does not yet solve the final screenless remote's pairing interaction. Bonds are stored by the Bluetooth stack. After a restart or disconnect, explicitly open pairing again to advertise/reconnect; unattended reconnection is not implemented.
+The initial pairing interaction uses the phone or computer for passkey entry; it does not yet solve the final screenless remote's pairing interaction. Bonds are stored by the Bluetooth stack. After a restart or disconnect, a key press or profile selection reconnects a paired profile.
 
 The USB-powered bench fixture reports 100 percent through the HID battery service as a fixed placeholder. It is not a battery measurement. The board is not configured for a battery-life test.
 
@@ -63,6 +63,17 @@ The USB-powered bench fixture reports 100 percent through the HID battery servic
 | mute | Consumer 0xE2 | Mute candidate |
 
 Home and Back passed in the owner-reported [first TV test](../docs/tests/2026-10-22-first-tv-test.md); the target was the bedroom TCL BeyondTV4, and other targets remain unverified. A and B are unassigned by default and never send literal letters; see [physical keys](#physical-keys).
+
+## Profiles
+
+Firmware v0.4 holds four profiles, one per TV. Each profile advertises from its own static random Bluetooth address and name (`Open Remote 1` to `Open Remote 4`), so a TV paired to one profile does not recognise the others.
+
+- **Select:** hold Home and press Up (1), Right (2), Down (3) or Left (4). The phone page has profile buttons; serial uses `profile 1` to `profile 4`.
+- **Pair:** hold Home and the arrow for 3 seconds, tap **Pair this profile** on the phone, or send `profile pair N`. Pairing replaces that profile's previous TV only.
+- **Reconnect:** selecting a paired profile, or pressing any key while disconnected, advertises for 30 seconds. The key that started the reconnect is discarded, not sent late.
+- `profile` lists each profile's address and whether it is paired. Profiles persist in NVS.
+
+A bond made before v0.4 used the board's public address. Remove the old **Open Remote C6** entry on that TV and pair it again to a profile.
 
 ## Physical keys
 
@@ -85,7 +96,7 @@ Header positions count from pin 1 at the USB end; `P1` is the 3V3/5V side and `P
 
 GND is available at P1-15, P2-1, P2-12 and P2-15. The cluster of directions, OK and Back sits on P2 next to ground.
 
-Inputs are sampled every 5 ms and must be stable for 20 ms. A press sends the same 60 ms tap as the phone page, so no key can stick down across a disconnect. Direction keys repeat after 400 ms, then every 150 ms. A press is dropped, not queued, while an earlier tap is still sending. A key that is held or shorted at startup does nothing until it is released.
+Inputs are sampled every 10 ms (one scheduler tick) and must be stable for 20 ms. A press sends the same 60 ms tap as the phone page, so no key can stick down across a disconnect. Direction keys repeat after 400 ms, then every 150 ms. A press is dropped, not queued, while an earlier tap is still sending. A key that is held or shorted at startup does nothing until it is released.
 
 Every debounced edge prints `KEY <name> pressed` or `released` on the serial console, even when no TV is connected. That makes the first switch testable on the bench without pairing. `keys` prints the map and live state of each input.
 

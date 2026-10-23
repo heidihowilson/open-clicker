@@ -32,6 +32,8 @@ bool portable_next(char *command) { return xQueueReceive(commands,command,0)==pd
 static bool valid_command(const char *s) {
     const char *allowed[]={"pair","stop","up","down","left","right","ok","back","escape","home","play","space","volume_up","volume_down","mute","yes","no"};
     for(size_t i=0;i<sizeof(allowed)/sizeof(allowed[0]);i++) if(!strcmp(s,allowed[i])) return true;
+    if(strlen(s)==9 && !strncmp(s,"profile ",8) && s[8]>='1' && s[8]<='4') return true;
+    if(strlen(s)==14 && !strncmp(s,"profile pair ",13) && s[13]>='1' && s[13]<='4') return true;
     if(strlen(s)==10 && !strncmp(s,"pin ",4)) {
         for(int i=4;i<10;i++) if(s[i]<'0'||s[i]>'9') return false;
         return true;

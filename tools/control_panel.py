@@ -14,7 +14,7 @@ import serial
 COMMANDS = frozenset('help status pair stop yes no up down left right ok back escape home play space volume_up volume_down mute'.split())
 
 def valid_command(value):
-    return isinstance(value, str) and (value in COMMANDS or re.fullmatch(r'pin [0-9]{6}', value) is not None)
+    return isinstance(value, str) and (value in COMMANDS or re.fullmatch(r'pin [0-9]{6}|profile (pair )?[1-4]', value) is not None)
 
 HTML = r'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Open Remote · Bench</title>
 <style>
