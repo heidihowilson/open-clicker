@@ -17,13 +17,18 @@ HERE = Path(__file__).resolve().parent
 SERVER = sys.argv[1] if len(sys.argv) > 1 else "http://192.168.0.210:8188"
 
 STYLE = ("Studio product photograph, soft daylight, shallow depth of field, realistic materials, "
-         "sharp focus on the keys. A handheld TV remote control with ten low-profile mechanical "
-         "keyboard keys: a cross of four arrow keys around a centre OK key, then Back, Home and "
-         "Play/Pause keys, and two spare keys marked A and B. The keycaps are short, flat, "
-         "sculpted Choc-style caps on low-profile switches, with small printed icons.")
-# The model adds rows of extra buttons unless the count is the last thing it reads.
-COUNT = ("The remote has exactly ten keys in total and a large plain smooth surface below them: "
-         "four arrows, OK, Back, Home, Play/Pause, A and B.")
+         "sharp focus on the keys. A handheld TV remote built like a small mechanical keyboard macropad.")
+# Remote-control words pull the model toward rubber buttons and rocker d-pads, so the keys are
+# described as keyboard parts, with the layout as a grid, and the whole clause goes last.
+KEYS = ("Its ten keys sit in a regular grid of three columns: Back, Up, Home on the top row; Left, OK, "
+        "Right on the second row; A, Down, B on the third row; and a single Play/Pause key centred "
+        "on the fourth row. Every key is an identical separate square low-profile mechanical keyboard "
+        "keycap, exactly like the keys of a Kailh Choc low-profile keyboard: a thin flat square cap "
+        "about 18 mm wide, standing a few millimetres above a flat switch plate on its own visible "
+        "low-profile switch, with even gaps between keys and a small printed legend on each cap.")
+
+# Each concept renders once per base seed (offset by its index); pick the best by eye.
+SEEDS = (301, 401, 501)
 
 CONCEPTS = {
     "classic-bar": "A slim conventional bar-shaped remote in matte charcoal 3D-printed plastic with "
@@ -75,12 +80,14 @@ def call(path, body=None):
 def main():
     first = next(iter(CONCEPTS))
     (HERE / "concept-render.api.json").write_text(
-        json.dumps(graph(f"{STYLE} {CONCEPTS[first]} {COUNT}", 201, f"open-remote/{first}"), indent=2) + "\n")
+        json.dumps(graph(f"{STYLE} {CONCEPTS[first]} {KEYS}", 301, f"open-remote/{first}"), indent=2) + "\n")
     queued = {}
     for i, (name, scene) in enumerate(CONCEPTS.items()):
-        reply = json.loads(call("/prompt", {"prompt": graph(f"{STYLE} {scene} {COUNT}", 201 + i, f"open-remote/{name}")}))
-        queued[name] = reply["prompt_id"]
-        print("queued", name, reply["prompt_id"], flush=True)
+        for seed in SEEDS:
+            key = f"{name}-{seed + i}"
+            reply = json.loads(call("/prompt", {"prompt": graph(f"{STYLE} {scene} {KEYS}", seed + i, f"open-remote/{name}")}))
+            queued[key] = reply["prompt_id"]
+            print("queued", key, reply["prompt_id"], flush=True)
     for name, pid in queued.items():
         while True:
             history = json.loads(call(f"/history/{pid}")).get(pid)
