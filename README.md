@@ -53,4 +53,4 @@ Hardware source belongs in `hardware/`, firmware in `firmware/`, and editable en
 
 ## Open release intent
 
-Publish editable electrical and mechanical designs, firmware, build instructions, manufacturing exports, and test procedures. Hardware, firmware, and documentation licenses must be selected before a public release; no license has been applied yet.
+Publish editable electrical and mechanical designs, firmware, build instructions, manufacturing exports, and test procedures. Firmware in `firmware/` is under the [MIT License](firmware/LICENSE). Hardware and documentation licenses are not selected yet; until they are, those files grant no reuse rights.

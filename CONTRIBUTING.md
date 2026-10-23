@@ -22,4 +22,4 @@ See [firmware instructions](firmware/README.md) for explicit flashing, phone acc
 - Mechanical drawings, verified pin assignments, and physical samples must precede a fabrication-ready PCB or enclosure claim.
 - Keep credentials, radio bonds, device backups, personal network details, logs, installed SDKs, and generated builds under ignored local paths. Backups under `local/` are not protected by Git; preserve them separately before deleting or moving that directory.
 - Do not commit third-party SDK checkouts. `tools/setup.sh` records the exact ESP-IDF revision.
-- Select licenses for software, hardware, and documentation before public release. Do not interpret the current absence of a license as a grant of reuse rights.
+- Firmware under `firmware/` is MIT licensed; contributions there are accepted under the same license. Hardware, documentation, and host tools have no license yet. Do not interpret that absence as a grant of reuse rights.
