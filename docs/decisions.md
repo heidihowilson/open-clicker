@@ -50,3 +50,4 @@ Only label a device supported after recording its exact model/software and testi
 
 - The remote runs on a battery. The handheld form factor is the point, so sleep, wake-on-key and reconnect latency are core requirements, not polish.
 - It must support all three reference targets: the bedroom TCL BeyondTV4, the living-room TCL QM6K, and the Apple TVs. Per-target device profiles are required.
+- Four device profiles, selected by holding Home and pressing an arrow. Details in the [software plan](software-plan.md).

@@ -46,6 +46,7 @@ Device credentials, backups, logs and installed tools are excluded from Git.
 - [Enclosure prototype requirements](enclosures/README.md)
 - [Firmware build and local control panel](firmware/README.md)
 - [Prototype milestones and acceptance checks](docs/prototype-plan.md)
+- [Software plan: profiles, reconnect, sleep and pairing](docs/software-plan.md)
 - [Decisions and unresolved questions](docs/decisions.md)
 - [Manufacturing and open release](docs/release-plan.md)
 
