@@ -2,6 +2,8 @@
 
 No CAD or printable manufacturing files have been created yet. Prior concept images establish visual direction only; they are not dimensioned designs.
 
+The reference concept sheet is in [docs/concepts](../docs/concepts/README.md): EXO, FOLD, LOOP, FIN, OFFSET and KEEL. All six share one ten-key column layout of low-profile mechanical keycaps: Home; Up; Left, OK, Right; Down; Back, Play/Pause; A, B.
+
 ## First physical prototype
 
 Use a printed switch plate and hand wiring with the existing Waveshare C6. Start with eight core controls (four directions, OK, Back, Home, Play/Pause) and reserve two configurable positions for the ten-key baseline.

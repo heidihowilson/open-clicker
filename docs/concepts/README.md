@@ -1,15 +1,25 @@
-# Concept renders
+# Enclosure concepts
 
-These are AI-generated mood images of hypothetical Open Remote enclosures. They are **not designs**: there are no dimensions behind them, key counts and legends drift, and the electronics shown are invented. Use them to talk about direction, not to model parts.
+![Six enclosure concepts: EXO, FOLD, LOOP, FIN, OFFSET, KEEL](enclosure-concepts.jpg)
 
-| File | Seed | Idea |
-| --- | --- | --- |
-| `palm-pebble.jpg` | 302 | Rounded pebble that fills the palm, textured PETG |
-| `clear-bench.jpg` | 403 | Bench prototype: clear shell showing the controller board |
-| `exploded.jpg` | 504 | Layer stack: keycaps, switches, plate, key board, controller, shell |
-| `walnut-retro.jpg` | 405 | Walnut frame with orange and cream caps |
-| `kid-chunky.jpg` | 406 | Oversized rounded shell with primary-colour caps |
+`enclosure-concepts.jpg` is the reference concept sheet: six expressive shells around one shared ten-key layout. It is an AI-generated mood image, not a design. No dimensions sit behind it.
 
-Every key is meant to be a low-profile mechanical keycap (Choc-style), in a 3-column grid: Back/Up/Home, Left/OK/Right, A/Down/B, then Play/Pause. Only `palm-pebble.jpg` gets exactly that; the others add extra keys. The prompt describes the keys as keyboard parts, because remote-control wording produced rubber buttons and rocker d-pads.
+- **EXO:** a printed lattice cage around a dark inner body, with exposed screws.
+- **FOLD:** a faceted, folded-plane shell.
+- **LOOP:** a smooth shell with a contrasting hanging loop at the base.
+- **FIN:** a body with ribbed fins along both sides for grip.
+- **OFFSET:** a key block set on top of separate coloured blocks.
+- **KEEL:** a faceted body with a keel underneath and brass screws.
 
-Rendered on 2026-10-22 with Qwen-Image-Edit-2511 (Q4_K_S GGUF) and the Lightning 8-step LoRA, as text-to-image with no reference image, 1024 × 1024. `render_concepts.py` queues three seeds per concept on a ComfyUI server and writes `<concept>-<seed>.png` here; picks are made by eye. `concept-render.api.json` is the graph, ready to open in ComfyUI. The classic bar concept stays in the script but no seed produced a usable image: it always became a full keyboard.
+## Shared key layout
+
+Every concept uses the same ten separate low-profile mechanical keycaps in one column:
+
+1. Home
+2. Up
+3. Left, OK, Right
+4. Down
+5. Back, Play/Pause
+6. A, B
+
+The shells change; the key layout and mounting interface stay the same. That is the modular intent in the [enclosure requirements](../../enclosures/README.md).

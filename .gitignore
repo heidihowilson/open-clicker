@@ -11,4 +11,3 @@ firmware/sdkconfig.old
 .env
 .env.*
 !.env.example
-docs/concepts/*.png
