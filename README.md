@@ -53,4 +53,8 @@ Hardware source belongs in `hardware/`, firmware in `firmware/`, and editable en
 
 ## Open release intent
 
-Publish editable electrical and mechanical designs, firmware, build instructions, manufacturing exports, and test procedures. Firmware in `firmware/` is under the [MIT License](firmware/LICENSE). Hardware and documentation licenses are not selected yet; until they are, those files grant no reuse rights.
+Publish editable electrical and mechanical designs, firmware, build instructions, manufacturing exports, and test procedures. - Firmware (`firmware/`): [MIT](firmware/LICENSE).
+- Hardware and enclosures (`hardware/`, `enclosures/`): [CERN-OHL-S-2.0](hardware/LICENSE). Modified designs you distribute or manufacture must publish their source under the same licence.
+- Documentation (`docs/` and the Markdown files in this repository): [CC BY-SA 4.0](docs/LICENSE).
+
+Host tools in `tools/` and `tests/` are not licensed yet.

@@ -21,8 +21,8 @@ Compare complete landed-and-tested kit cost across quantities. No price or batte
 
 ## Release boundaries
 
-The project intends genuine open hardware, including editable sources and permission for others to manufacture and sell derivatives. Select suitable licenses before publication. [OSHWA's definition](https://oshwa.org/definition/) describes these freedoms.
+The project intends genuine open hardware, including editable sources and permission for others to manufacture and sell derivatives. The strongly reciprocal hardware licence keeps derivatives open, including ones sold as assembled boards. [OSHWA's definition](https://oshwa.org/definition/) describes these freedoms.
 
 Before a commercial pilot, determine destination markets and review applicable radio/product requirements and battery handling/shipping obligations for the actual configuration. Track the chosen radio module's integration conditions in the design record.
 
-No custom PCBs have been ordered. The source repository is public. Firmware is MIT licensed; hardware and documentation licenses are not selected yet. Existing C6 development hardware passed bench checks and an owner-reported TV control test. Choc V1 switches are ordered for the next physical prototype; production hardware validation remains outstanding.
+No custom PCBs have been ordered. The source repository is public. Firmware is MIT, hardware and enclosures are CERN-OHL-S-2.0, and documentation is CC BY-SA 4.0. Existing C6 development hardware passed bench checks and an owner-reported TV control test. Choc V1 switches are ordered for the next physical prototype; production hardware validation remains outstanding.
