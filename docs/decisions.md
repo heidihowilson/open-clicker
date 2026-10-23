@@ -45,3 +45,8 @@ These are reversible working choices for the first prototype:
 ## Compatibility policy
 
 Only label a device supported after recording its exact model/software and testing the promised actions. Keep untested or community-reported profiles visibly distinct. A successful connection is not a complete compatibility test.
+
+## Owner decisions, 2026-10-22
+
+- The remote runs on a battery. The handheld form factor is the point, so sleep, wake-on-key and reconnect latency are core requirements, not polish.
+- It must support all three reference targets: the bedroom TCL BeyondTV4, the living-room TCL QM6K, and the Apple TVs. Per-target device profiles are required.
