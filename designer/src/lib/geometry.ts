@@ -3,8 +3,9 @@ import { KEYCAPS, type Design, type Key } from "./design";
 export interface Point { x: number; y: number }
 export interface Bounds { minX: number; minY: number; maxX: number; maxY: number }
 
-/* XIAO module outline, mounted on the back with USB-C at the bottom edge. */
-export const XIAO = { widthMm: 17.8, lengthMm: 21, heightMm: 3.5 } as const;
+/* XIAO module envelope (Seeed OPL footprint), mounted on the back with USB-C at the bottom
+ * edge. Height is the board plus the USB-C receptacle. */
+export const XIAO = { widthMm: 17.8, lengthMm: 21, heightMm: 4.5, usbEndMm: 12.05 } as const;
 export const CLEARANCE_MM = 0.5;
 
 export function corners(key: Key, widthMm: number, depthMm: number): Point[] {
@@ -57,7 +58,8 @@ export function boardBounds(design: Design): Bounds {
 }
 
 export function xiaoPlacement(bounds: Bounds): Point {
-  return { x: (bounds.minX + bounds.maxX) / 2, y: bounds.maxY - XIAO.lengthMm / 2 - 1 };
+  /* Footprint origin, placed so the USB-C face sits flush with the board edge. */
+  return { x: (bounds.minX + bounds.maxX) / 2, y: bounds.maxY - XIAO.usbEndMm };
 }
 
 /* Battery sits between the top edge and the XIAO. */
