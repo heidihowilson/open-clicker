@@ -8,7 +8,8 @@
   import { ACTIONS, DesignSchema, SHELLS, parseDesign, type Design } from "./lib/design";
   import { keymap, keymapHeader } from "./lib/exports";
   import { planPins } from "./lib/matrix";
-  import { bom, bomTotal, usd } from "./lib/bom";
+  import { usd } from "./lib/bom";
+  import { DEFAULT_PRICING, tiers, type Tier } from "./lib/pricing";
 
   const SEEDS: Record<string, Design> = { classic: parseDesign(classicSeed), "thumb-arc": parseDesign(arcSeed) };
   const STORE = "open-remote-designer:v1";
@@ -32,8 +33,11 @@
   const chip = $derived(CHIPS[design.chip]);
   const key = $derived(design.keys.find((k) => k.id === selected) ?? null);
   const errors = $derived(findings.filter((f) => f.level === "error").length);
-  const parts = $derived(bom(design));
-  const total = $derived(bomTotal(parts));
+  let assumptions = $state({ ...DEFAULT_PRICING });
+  let tierId = $state<Tier["id"]>("assembled");
+  const options = $derived(tiers(design, assumptions));
+  const tier = $derived(options.find((t) => t.id === tierId) ?? options[0]!);
+  const headline = (t: Tier) => t.priceUsd ?? t.costUsd;
 
   $effect(() => { localStorage.setItem(STORE, JSON.stringify($state.snapshot(design))); });
 
@@ -79,7 +83,7 @@
     <div class="cell"><small>DRAWING</small><input class="title" bind:value={design.name} maxlength="60" aria-label="Design name" /></div>
     <div class="cell meta"><small>CONTROLLER</small><b>{chip.label}</b></div>
     <div class="cell meta"><small>UNITS · DATE</small><b>MM · {today}</b></div>
-    <div class="cell cost"><small>EST. COST</small><b>{usd(total)}</b></div>
+    <div class="cell cost"><small>EST. {tier.id === "diy" ? "DIY COST" : tier.id === "kit" ? "KIT PRICE" : "BUILT PRICE"}</small><b>{usd(headline(tier))}</b></div>
     <div class="cell state" class:bad={errors > 0}><small>STATUS</small><b>{errors ? `${errors} ISSUE${errors > 1 ? "S" : ""}` : "BUILDABLE"}</b></div>
   </header>
 
@@ -143,20 +147,45 @@
 
     <aside class="pane p-checks">
       <section>
-        <h2>05 · Parts · cost</h2>
+        <h2>05 · Pricing</h2>
+        <div class="tiers" role="tablist" aria-label="Pricing option">
+          {#each options as t, i (t.id)}
+            <button role="tab" aria-selected={t.id === tierId} class:on={t.id === tierId} onclick={() => (tierId = t.id)}>
+              <small>{i + 1}</small><span>{t.id === "diy" ? "DIY" : t.id === "kit" ? "KIT" : "BUILT"}</span><b>{usd(headline(t))}</b>
+            </button>
+          {/each}
+        </div>
+        <h3>{tier.title}</h3>
+        <p class="note">{tier.summary}<br />You: {tier.youDo}</p>
         <table class="bom">
-          <thead><tr><th>PART</th><th class="n">QTY</th><th class="n">EA</th><th class="n">LINE</th></tr></thead>
+          <thead><tr><th>ITEM</th><th class="n">QTY</th><th class="n">EA</th><th class="n">LINE</th></tr></thead>
           <tbody>
-            {#each parts as line (line.id)}
+            {#each tier.lines as line}
               <tr title={line.basis}>
-                <td><b>{line.label}</b><small>{line.spec}</small></td>
+                <td><b>{line.label}</b><small>{line.basis}</small></td>
                 <td class="n">{line.qty}</td><td class="n">{usd(line.unitUsd)}</td><td class="n">{usd(line.qty * line.unitUsd)}</td>
               </tr>
             {/each}
           </tbody>
-          <tfoot><tr><td colspan="3">ESTIMATED TOTAL</td><td class="n">{usd(total)}</td></tr></tfoot>
+          <tfoot>
+            {#if tier.priceUsd === null}
+              <tr><td colspan="3">YOU PAY, PER REMOTE</td><td class="n">{usd(tier.costUsd)}</td></tr>
+            {:else}
+              <tr class="muted"><td colspan="3">OUR COST</td><td class="n">{usd(tier.costUsd)}</td></tr>
+              <tr><td colspan="3">PRICE AT {Math.round(assumptions.margin * 100)}% MARGIN</td><td class="n">{usd(tier.priceUsd)}</td></tr>
+            {/if}
+            {#if tier.extraUsd > 0}<tr class="muted"><td colspan="3">{tier.extraNote}</td><td class="n">{usd(tier.extraUsd)}</td></tr>{/if}
+          </tfoot>
         </table>
-        <p class="note">Small-quantity retail estimates, before shipping, tax, solder and tools. Hover a line for its basis.</p>
+        {#if tier.priceUsd !== null}
+          <div class="grid assumptions">
+            <label>Batch <input type="number" min="5" max="5000" step="5" bind:value={assumptions.batch} /></label>
+            <label>Margin % <input type="number" min="0" max="90" step="5" value={Math.round(assumptions.margin * 100)}
+              oninput={(e) => (assumptions.margin = Math.min(0.9, Math.max(0, Number(e.currentTarget.value) / 100)))} /></label>
+            <label>Labor $/h <input type="number" min="0" max="200" step="5" bind:value={assumptions.laborUsdPerHour} /></label>
+          </div>
+        {/if}
+        <p class="note">Estimates before shipping and tax. Hover a line for its basis. The no-solder kit uses hot-swap sockets, which the 3D model does not show yet.</p>
       </section>
       <section>
         <h2>06 · Checks</h2>
@@ -238,6 +267,13 @@
   .findings i { font-style: normal; font-weight: 700; letter-spacing: 1px; }
   .findings .error i { color: var(--error); } .findings .warning i { color: var(--warn); } .findings .info i { color: var(--accent); }
   table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
+  .tiers button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px; text-transform: none; letter-spacing: 0; }
+  .tiers small { font-size: 9px; color: var(--line); } .tiers button.on small { color: var(--paper); }
+  .tiers span { font-size: 10px; letter-spacing: 2px; } .tiers b { font-size: 14px; }
+  h3 { margin: 4px 0 2px; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink); }
+  .bom tfoot tr.muted td { color: var(--line); font-weight: 400; padding-top: 4px; }
+  .assumptions { margin-top: 10px; grid-template-columns: repeat(3, 1fr); }
   .bom th { width: auto; font-size: 9px; letter-spacing: 1px; border-bottom: 1px solid var(--rule); }
   .bom td { vertical-align: top; }
   .bom td b { display: block; font-weight: 600; }

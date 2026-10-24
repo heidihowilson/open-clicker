@@ -93,3 +93,18 @@ test("BOM has one line per purchasable kind and a sane total", async () => {
   expect(total).toBeGreaterThan(15);
   expect(total).toBeLessThan(40);
 });
+
+test("pricing tiers rise from DIY to kit to assembled", async () => {
+  const { tiers, DEFAULT_PRICING } = await import("../src/lib/pricing");
+  const [diy, kit, built] = tiers(classic);
+  expect(diy!.priceUsd).toBeNull();
+  expect(kit!.priceUsd!).toBeGreaterThan(kit!.costUsd);
+  expect(built!.costUsd).toBeGreaterThan(kit!.costUsd);
+  expect(built!.priceUsd!).toBeGreaterThan(kit!.priceUsd!);
+  /* Kit buyers print their own shell; the assembled remote includes ours. */
+  expect(kit!.lines.some((l) => l.label.startsWith("Shell"))).toBe(false);
+  expect(built!.lines.some((l) => l.label === "Shell filament")).toBe(true);
+  /* A bigger batch spreads the assembly setup thinner. */
+  const big = tiers(classic, { ...DEFAULT_PRICING, batch: 500 })[1]!;
+  expect(big.costUsd).toBeLessThan(kit!.costUsd);
+});

@@ -76,4 +76,5 @@ export function bomTotal(lines: BomLine[]): number {
   return Math.round(lines.reduce((sum, l) => sum + l.qty * l.unitUsd, 0) * 100) / 100;
 }
 
-export const usd = (v: number) => `$${v.toFixed(2)}`;
+/* Sub-cent unit prices (solder joints, resistors) keep enough digits to stay visible. */
+export const usd = (v: number) => `$${v > 0 && v < 0.01 ? v.toFixed(4) : v.toFixed(2)}`;
