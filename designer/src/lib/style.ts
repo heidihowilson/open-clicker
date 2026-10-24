@@ -47,22 +47,35 @@ function cached(key: string, make: () => THREE.Material): THREE.Material {
   return m;
 }
 
-export function applyStyle(root: THREE.Object3D, style: ViewStyle) {
+/* With a focused part, everything outside it turns to a faint ghost. */
+export function applyStyle(root: THREE.Object3D, style: ViewStyle, focus: THREE.Object3D | null = null) {
+  const lit = new Set<THREE.Object3D>();
+  focus?.traverse((o) => lit.add(o));
   root.traverse((o) => {
+    const ghost = focus !== null && !lit.has(o);
     if (o instanceof THREE.LineSegments && o.userData.edge) {
-      o.material = style === "blueprint"
-        ? cached("edge-bp", () => new THREE.LineBasicMaterial({ color: BLUEPRINT.ink, transparent: true, opacity: 0.85 }))
-        : cached("edge-solid", () => new THREE.LineBasicMaterial({ color: "#000000", transparent: true, opacity: 0.22 }));
+      o.material = ghost
+        ? cached(`edge-ghost-${style}`, () => new THREE.LineBasicMaterial({ color: style === "blueprint" ? BLUEPRINT.ink : "#5a6470", transparent: true, opacity: 0.08 }))
+        : style === "blueprint"
+          ? cached("edge-bp", () => new THREE.LineBasicMaterial({ color: BLUEPRINT.ink, transparent: true, opacity: 0.85 }))
+          : cached("edge-solid", () => new THREE.LineBasicMaterial({ color: "#000000", transparent: true, opacity: 0.22 }));
       return;
     }
     if (!(o instanceof THREE.Mesh)) return;
     if (o.userData.legend) {
       const m = o.material as THREE.MeshBasicMaterial;
       m.color.set(style === "blueprint" ? BLUEPRINT.ink : "#1b1f1d");
+      m.opacity = ghost ? 0.08 : 1;
       return;
     }
     const role = o.userData.role as Role | undefined;
     if (!role) return;
+    if (ghost) {
+      o.material = cached(`ghost-${style}`, () => new THREE.MeshBasicMaterial({
+        color: style === "blueprint" ? BLUEPRINT.line : "#9aa4ae", transparent: true, opacity: 0.05, depthWrite: false, side: THREE.DoubleSide,
+      }));
+      return;
+    }
     if (style === "blueprint") {
       const copper = role === "copper";
       o.material = cached(`bp-${copper}`, () => new THREE.MeshBasicMaterial({

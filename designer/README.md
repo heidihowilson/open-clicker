@@ -18,7 +18,11 @@ bun run build    # static site in dist/
 
 ## 3D model
 
-`src/lib/parts.ts` builds the assembly from published footprints (`src/lib/parts-data.ts` names each source): Kailh Choc V1 posts and pins from Ergogen's footprint, the XIAO outline and 14-pad grid from Seeed's OPL KiCad library, MBK keycap size, SOD-123 diodes, the LiPo, IR parts and a two-part shell. The PCB carries real switch holes. Heights marked approximate wait for calipers. **Explode** separates the layers with labelled callouts; **Solid** switches from blueprint line work to shaded materials. Phones get a tabbed layout.
+`src/lib/parts.ts` builds the assembly from published footprints (`src/lib/parts-data.ts` names each source): Kailh Choc V1 posts and pins from Ergogen's footprint, the XIAO outline and 14-pad grid from Seeed's OPL KiCad library, MBK keycap size, SOD-123 diodes, the LiPo, IR parts and a two-part shell. The PCB carries real switch holes. Heights marked approximate wait for calipers. The view opens shaded; **Blueprint** switches to line work. **Explode** separates the build into the units you buy or print, never finer: one XIAO, each switch, each keycap, each diode and resistor, the LiPo, the IR parts, the PCB and the two shell halves. Tap one to ghost the rest and fly to it with its price; tap again to return. Phones get a tabbed layout.
+
+## Cost
+
+`src/lib/bom.ts` lists every unit with a quantity and an estimated small-quantity retail price, and each line records its basis. Shell parts are priced by estimated printed mass. The title block shows the total; shipping, tax, solder and tools are excluded.
 
 ## Not yet
 

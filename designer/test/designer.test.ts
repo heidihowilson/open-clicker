@@ -78,3 +78,18 @@ test("keymap and header agree", () => {
   expect(h).toContain("#define OR_BATTERY_GPIO 0");
   expect(() => keymapHeader(withChip(classic, "xiao-nrf52840"))).toThrow();
 });
+
+test("BOM has one line per purchasable kind and a sane total", async () => {
+  const { bom, bomTotal } = await import("../src/lib/bom");
+  const lines = bom(classic);
+  const ids = lines.map((l) => l.id);
+  expect(new Set(ids).size).toBe(ids.length);
+  expect(lines.find((l) => l.id === "switch")?.qty).toBe(10);
+  expect(lines.find((l) => l.id === "resistor")?.qty).toBe(4); /* IR pair + battery divider */
+  expect(ids).not.toContain("ir-receiver");
+  const nrf = bom(withChip(classic, "xiao-nrf52840"));
+  expect(nrf.find((l) => l.id === "resistor")?.qty).toBe(2); /* nRF has a built-in divider */
+  const total = bomTotal(lines);
+  expect(total).toBeGreaterThan(15);
+  expect(total).toBeLessThan(40);
+});

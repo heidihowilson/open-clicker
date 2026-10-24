@@ -4,6 +4,7 @@ import { boardBounds, xiaoPlacement, type Bounds } from "./geometry";
 import { CHOC, DIODE, IR, MBK, PCB, SHELL, XIAO_BOARD } from "./parts-data";
 import { CHIPS } from "./chips";
 import type { Action } from "./design";
+import { bom, usd, type BomId, type BomLine } from "./bom";
 
 /* World axes: X = design x, Z = design y (toward the bottom of the remote), Y = up.
  * The PCB top surface is Y = 0. */
@@ -17,6 +18,9 @@ const ACTION_TINT: Record<Action, string> = {
 
 export type Role = "fr4" | "copper" | "plastic-dark" | "plastic-light" | "metal" | "chip" | "cap" | "battery" | "shell" | "led" | "wire";
 export interface PartInfo { layer: number; label: string; detail: string }
+
+/* Marks a purchasable unit: the explode and focus never split it further. */
+function item<T extends THREE.Object3D>(object: T, id: BomId): T { object.userData.item = id; return object; }
 
 function mesh(geometry: THREE.BufferGeometry, role: Role): THREE.Mesh {
   const m = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
@@ -86,7 +90,7 @@ function xiaoToDesign(at: { x: number; y: number }, fx: number, fy: number) {
 }
 
 export function buildPcb(design: Design, bounds: Bounds): THREE.Group {
-  const g = part({ layer: 3, label: "PCB", detail: `FR-4 ${PCB.thickness} mm · ${(bounds.maxX - bounds.minX).toFixed(1)} × ${(bounds.maxY - bounds.minY).toFixed(1)}` });
+  const g = new THREE.Group();
   const shape = outline(bounds, 0, PCB.cornerRadius);
   for (const key of design.keys) {
     const c = local(key, 0, 0);
@@ -94,6 +98,7 @@ export function buildPcb(design: Design, bounds: Bounds): THREE.Group {
     for (const sx of [-1, 1]) { const p = local(key, sx * CHOC.sidePosts.x, 0); shape.holes.push(circleHole(p.x, p.y, CHOC.sidePosts.diameter)); }
     for (const pin of CHOC.pins) { const p = local(key, pin.x, pin.y); shape.holes.push(circleHole(p.x, p.y, CHOC.pinDrill)); }
   }
+  item(g, "pcb");
   g.add(slab(shape, -PCB.thickness, PCB.thickness, "fr4"));
   /* Copper rings around the switch pins, both faces. */
   for (const key of design.keys) for (const pin of CHOC.pins) {
@@ -119,7 +124,8 @@ export function buildSwitch(key: Key): THREE.Group {
   for (const sx of [-1, 1]) { const s = cylinder(CHOC.sidePosts.diameter - 0.2, CHOC.sidePosts.length, "plastic-dark", 12); s.position.set(sx * CHOC.sidePosts.x, -CHOC.sidePosts.length / 2, 0); g.add(s); }
   for (const pin of CHOC.pins) { const m = box(0.6, CHOC.pinLength, 0.25, "metal", pin.x, -CHOC.pinLength / 2, pin.y); g.add(m); }
   placeOnKey(g, key);
-  return g;
+  g.userData.keyId = key.id;
+  return item(g, "switch");
 }
 
 function legendTexture(text: string): THREE.CanvasTexture {
@@ -151,14 +157,14 @@ export function buildKeycap(design: Design, key: Key): THREE.Group {
   g.position.y = MBK.seat;
   const holder = new THREE.Group(); holder.add(g);
   placeOnKey(holder, key);
-  return holder;
+  holder.userData.keyId = key.id;
+  return item(holder, "keycap");
 }
 
 export function buildXiao(design: Design, bounds: Bounds): THREE.Group {
-  const chip = CHIPS[design.chip];
   const at = xiaoPlacement(bounds);
   const X = XIAO_BOARD;
-  const g = part({ layer: 1.4, label: chip.label, detail: "21 × 17.8 mm · castellated, under the PCB" });
+  const g = new THREE.Group();
   const top = -PCB.thickness - 0.05; /* XIAO pad side against the main board */
   const c0 = xiaoToDesign(at, X.minX, -X.halfWidth), c1 = xiaoToDesign(at, X.maxX, X.halfWidth);
   const shape = roundedRect(Math.min(c0.x, c1.x), Math.min(c0.y, c1.y), Math.max(c0.x, c1.x), Math.max(c0.y, c1.y), 1);
@@ -181,11 +187,11 @@ export function buildXiao(design: Design, bounds: Bounds): THREE.Group {
   const antAt = xiaoToDesign(at, X.antenna.x, X.antenna.y);
   g.add(box(X.antenna.depth, X.antenna.height, X.antenna.width, "plastic-light", antAt.x, under - X.antenna.height / 2, antAt.y));
   for (const b of X.buttons) { const p = xiaoToDesign(at, b.x, b.y); g.add(box(2.6, 1.0, 3.2, "metal", p.x, under - 0.5, p.y)); }
-  return g;
+  return item(g, "controller");
 }
 
 export function buildDiodes(design: Design): THREE.Group {
-  const g = part({ layer: 2, label: "Diodes", detail: `1N4148W SOD-123 × ${design.keys.length} · one per key` });
+  const g = new THREE.Group();
   for (const key of design.keys) {
     const d = new THREE.Group();
     d.add(box(DIODE.length, DIODE.height, DIODE.width, "chip", 0, -DIODE.height / 2, 0));
@@ -193,14 +199,14 @@ export function buildDiodes(design: Design): THREE.Group {
     for (const sx of [-1, 1]) d.add(box(DIODE.lead, 0.2, 0.9, "metal", sx * (DIODE.length / 2 + DIODE.lead / 2), -0.1, 0));
     const p = local(key, DIODE.offset.x, DIODE.offset.y);
     d.position.set(p.x, -PCB.thickness, p.y); d.rotation.y = (-key.r * Math.PI) / 180;
-    g.add(d);
+    g.add(item(d, "diode"));
   }
   return g;
 }
 
 export function buildBattery(design: Design, bounds: Bounds): THREE.Group {
   const b = design.battery;
-  const g = part({ layer: 1, label: "LiPo cell", detail: `${b.capacityMah} mAh · ${b.lengthMm} × ${b.widthMm} × ${b.thicknessMm} mm` });
+  const g = new THREE.Group();
   const at = xiaoPlacement(bounds);
   const cx = (bounds.minX + bounds.maxX) / 2, cy = at.y - 10.5 - 2 - b.lengthMm / 2;
   const top = -PCB.thickness - DIODE.height - 0.4;
@@ -213,12 +219,12 @@ export function buildBattery(design: Design, bounds: Bounds): THREE.Group {
     wire.rotation.x = Math.PI / 2; wire.position.set(cx + i * 2, top - b.thicknessMm / 2, cy - b.lengthMm / 2 - 4);
     g.add(wire);
   }
-  return g;
+  return item(g, "battery");
 }
 
 export function buildIr(design: Design, bounds: Bounds): THREE.Group | null {
   if (!design.options.irTransmit && !design.options.irReceive) return null;
-  const g = part({ layer: 4, label: "IR", detail: [design.options.irTransmit && "940 nm LED", design.options.irReceive && "38 kHz receiver"].filter(Boolean).join(" · ") });
+  const g = new THREE.Group();
   const cx = (bounds.minX + bounds.maxX) / 2, edge = bounds.minY;
   if (design.options.irTransmit) {
     const led = new THREE.Group();
@@ -227,43 +233,88 @@ export function buildIr(design: Design, bounds: Bounds): THREE.Group | null {
     const dome = mesh(new THREE.SphereGeometry(IR.ledDiameter / 2, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), "led");
     dome.rotation.x = -Math.PI / 2; dome.position.z = -(IR.ledLength - IR.ledDiameter / 2) / 2 - 0.5; led.add(dome);
     led.position.set(cx - (design.options.irReceive ? 5 : 0), 2, edge + 3);
-    g.add(led);
+    g.add(item(led, "ir-led"));
+    /* Driver transistor and its two resistors sit on the back, behind the LED. */
+    const driver = box(2.9, 1.0, 1.3, "chip", led.position.x, -PCB.thickness - 0.5, edge + 9);
+    g.add(item(driver, "ir-driver"));
+    for (const dx of [-3.2, 3.2]) g.add(item(smdResistor(led.position.x + dx, edge + 9), "resistor"));
   }
   if (design.options.irReceive) {
     const r = IR.receiver;
-    g.add(box(r.width, r.height, r.depth, "plastic-dark", cx + (design.options.irTransmit ? 5 : 0), r.height / 2, edge + 2 + r.depth / 2));
+    g.add(item(box(r.width, r.height, r.depth, "plastic-dark", cx + (design.options.irTransmit ? 5 : 0), r.height / 2, edge + 2 + r.depth / 2), "ir-receiver"));
   }
+  return g;
+}
+
+function smdResistor(x: number, z: number): THREE.Group {
+  const r = new THREE.Group();
+  r.add(box(1.4, 0.5, 1.25, "chip", 0, -0.25, 0));
+  for (const sx of [-1, 1]) r.add(box(0.3, 0.52, 1.26, "metal", sx * 0.85, -0.25, 0));
+  r.position.set(x, -PCB.thickness, z);
+  return r;
+}
+
+/* Battery divider: two resistors beside the XIAO when the module has none built in. */
+export function buildDivider(design: Design, bounds: Bounds): THREE.Group | null {
+  if (!design.options.batterySense || CHIPS[design.chip].batteryDividerBuiltIn) return null;
+  const at = xiaoPlacement(bounds);
+  const g = new THREE.Group();
+  for (const dz of [-2, 2]) g.add(item(smdResistor(at.x + XIAO_BOARD.halfWidth + 3, at.y + dz), "resistor"));
   return g;
 }
 
 export function buildShell(design: Design, bounds: Bounds): { bottom: THREE.Group; top: THREE.Group } {
   const cap = KEYCAPS[design.keycap];
   const depth = PCB.thickness + Math.max(1.2 + 4.5, DIODE.height + 0.4 + design.battery.thicknessMm) + 1;
-  const bottom = part({ layer: 0, label: `Shell · ${design.shell.family}`, detail: `tray ${SHELL.wall} mm wall · ${(depth + SHELL.floor).toFixed(1)} mm deep` });
+  const bottom = new THREE.Group();
   const outer = outline(bounds, SHELL.wall + SHELL.clearance, PCB.cornerRadius);
   const wall = outline(bounds, SHELL.wall + SHELL.clearance, PCB.cornerRadius);
   wall.holes.push(outline(bounds, SHELL.clearance, PCB.cornerRadius));
   bottom.add(slab(outer, -depth - SHELL.floor, SHELL.floor, "shell"));
   bottom.add(slab(wall, -depth, depth - PCB.thickness, "shell"));
+  item(bottom, "shell-bottom");
 
-  const top = part({ layer: 5, label: "Top bezel", detail: `${SHELL.bezel} mm · ${design.keys.length} key openings` });
+  const top = new THREE.Group();
   const bezel = outline(bounds, SHELL.wall + SHELL.clearance, PCB.cornerRadius);
   for (const key of design.keys) bezel.holes.push(rotatedRectHole(key, cap.widthMm + 1, cap.depthMm + 1));
   const rim = outline(bounds, SHELL.wall + SHELL.clearance, PCB.cornerRadius);
   rim.holes.push(outline(bounds, SHELL.clearance, PCB.cornerRadius));
   top.add(slab(rim, -PCB.thickness, PCB.thickness + 3.6, "shell"));
   top.add(slab(bezel, 3.6, SHELL.bezel, "shell"));
+  item(top, "shell-top");
   return { bottom, top };
+}
+
+/* Callout text for a layer: the BOM lines it holds, with quantity and unit price. */
+function describe(lines: BomLine[], ids: BomId[]): string {
+  return lines.filter((l) => ids.includes(l.id)).map((l) => `${l.qty > 1 ? `${l.qty} × ` : ""}${usd(l.unitUsd)}`).join(" + ");
 }
 
 export function buildAssembly(design: Design): THREE.Group {
   const bounds = boardBounds(design);
+  const lines = bom(design);
+  const label = (id: BomId) => lines.find((l) => l.id === id)?.label ?? id;
   const root = new THREE.Group();
   const shell = buildShell(design, bounds);
-  const switches = part({ layer: 4, label: "Kailh Choc V1", detail: `× ${design.keys.length} · 15 × 15 mm` });
-  const caps = part({ layer: 6, label: `Keycaps · ${design.keycap === "choc-mbk" ? "MBK" : "MCC"}`, detail: `${KEYCAPS[design.keycap].widthMm} × ${KEYCAPS[design.keycap].depthMm} mm × ${design.keys.length}` });
+  const switches = part({ layer: 4, label: label("switch"), detail: describe(lines, ["switch"]) });
+  const caps = part({ layer: 6, label: label("keycap"), detail: describe(lines, ["keycap"]) });
   for (const key of design.keys) { switches.add(buildSwitch(key)); caps.add(buildKeycap(design, key)); }
-  const parts = [shell.bottom, buildBattery(design, bounds), buildXiao(design, bounds), buildDiodes(design), buildPcb(design, bounds), switches, buildIr(design, bounds), shell.top, caps];
+  const back = buildDiodes(design);
+  const divider = buildDivider(design, bounds);
+  if (divider) back.add(...divider.children);
+  back.userData.part = { layer: 2, label: "Diodes · resistors", detail: describe(lines, ["diode", "resistor"]) };
+  const wrap = (g: THREE.Group | null, layer: number, ids: BomId[]) => {
+    if (!g) return null;
+    const outer = part({ layer, label: ids.map(label).join(" · "), detail: describe(lines, ids) });
+    outer.add(g);
+    return outer;
+  };
+  const ir = buildIr(design, bounds);
+  if (ir) ir.userData.part = { layer: 4, label: "IR", detail: describe(lines, ["ir-led", "ir-driver", "ir-receiver"]) };
+  const parts = [
+    wrap(shell.bottom, 0, ["shell-bottom"]), wrap(buildBattery(design, bounds), 1, ["battery"]), wrap(buildXiao(design, bounds), 1.4, ["controller"]),
+    back, wrap(buildPcb(design, bounds), 3, ["pcb"]), switches, ir, wrap(shell.top, 5, ["shell-top"]), caps,
+  ];
   for (const p of parts) if (p) root.add(p);
   return root;
 }

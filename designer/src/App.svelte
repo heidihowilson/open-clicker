@@ -8,6 +8,7 @@
   import { ACTIONS, DesignSchema, SHELLS, parseDesign, type Design } from "./lib/design";
   import { keymap, keymapHeader } from "./lib/exports";
   import { planPins } from "./lib/matrix";
+  import { bom, bomTotal, usd } from "./lib/bom";
 
   const SEEDS: Record<string, Design> = { classic: parseDesign(classicSeed), "thumb-arc": parseDesign(arcSeed) };
   const STORE = "open-remote-designer:v1";
@@ -31,6 +32,8 @@
   const chip = $derived(CHIPS[design.chip]);
   const key = $derived(design.keys.find((k) => k.id === selected) ?? null);
   const errors = $derived(findings.filter((f) => f.level === "error").length);
+  const parts = $derived(bom(design));
+  const total = $derived(bomTotal(parts));
 
   $effect(() => { localStorage.setItem(STORE, JSON.stringify($state.snapshot(design))); });
 
@@ -76,11 +79,12 @@
     <div class="cell"><small>DRAWING</small><input class="title" bind:value={design.name} maxlength="60" aria-label="Design name" /></div>
     <div class="cell meta"><small>CONTROLLER</small><b>{chip.label}</b></div>
     <div class="cell meta"><small>UNITS · DATE</small><b>MM · {today}</b></div>
+    <div class="cell cost"><small>EST. COST</small><b>{usd(total)}</b></div>
     <div class="cell state" class:bad={errors > 0}><small>STATUS</small><b>{errors ? `${errors} ISSUE${errors > 1 ? "S" : ""}` : "BUILDABLE"}</b></div>
   </header>
 
   <nav class="tabs" aria-label="Sections">
-    {#each [["layout", "LAYOUT"], ["model", "3D"], ["build", "BUILD"], ["checks", `CHECKS${errors ? ` · ${errors}` : ""}`]] as [id, label]}
+    {#each [["layout", "LAYOUT"], ["model", "3D"], ["build", "BUILD"], ["checks", `PARTS${errors ? ` · ${errors}!` : ""}`]] as [id, label]}
       <button class:on={tab === id} onclick={() => (tab = id as typeof tab)}>{label}</button>
     {/each}
   </nav>
@@ -139,11 +143,27 @@
 
     <aside class="pane p-checks">
       <section>
-        <h2>05 · Checks</h2>
+        <h2>05 · Parts · cost</h2>
+        <table class="bom">
+          <thead><tr><th>PART</th><th class="n">QTY</th><th class="n">EA</th><th class="n">LINE</th></tr></thead>
+          <tbody>
+            {#each parts as line (line.id)}
+              <tr title={line.basis}>
+                <td><b>{line.label}</b><small>{line.spec}</small></td>
+                <td class="n">{line.qty}</td><td class="n">{usd(line.unitUsd)}</td><td class="n">{usd(line.qty * line.unitUsd)}</td>
+              </tr>
+            {/each}
+          </tbody>
+          <tfoot><tr><td colspan="3">ESTIMATED TOTAL</td><td class="n">{usd(total)}</td></tr></tfoot>
+        </table>
+        <p class="note">Small-quantity retail estimates, before shipping, tax, solder and tools. Hover a line for its basis.</p>
+      </section>
+      <section>
+        <h2>06 · Checks</h2>
         <ul class="findings">{#each findings as f}<li class={f.level}><i>{f.level === "error" ? "ERR" : f.level === "warning" ? "WARN" : "OK"}</i>{f.message}</li>{/each}</ul>
       </section>
       <section>
-        <h2>06 · Pin plan</h2>
+        <h2>07 · Pin plan</h2>
         {#if plan.ok}
           <table>
             <tbody>
@@ -157,7 +177,7 @@
         {:else}<p class="note">No plan — see checks.</p>{/if}
       </section>
       <section>
-        <h2>07 · Export</h2>
+        <h2>08 · Export</h2>
         <div class="col">
           <button onclick={() => exportFile("design")}>Design file · JSON</button>
           <button onclick={() => exportFile("keymap")} disabled={!plan.ok}>Keymap · JSON</button>
@@ -189,7 +209,8 @@
   :global(select option) { background: var(--paper); }
 
   .app { display: flex; flex-direction: column; height: 100dvh; }
-  .titleblock { display: grid; grid-template-columns: 1.2fr 2fr 1fr 1fr auto; border-bottom: 1px solid var(--rule); }
+  .titleblock { display: grid; grid-template-columns: 1.2fr 2fr 1fr 1fr auto auto; border-bottom: 1px solid var(--rule); }
+  .cost b { color: var(--copper); }
   .cell { padding: 6px 12px; border-right: 1px solid var(--rule); display: flex; flex-direction: column; min-width: 0; }
   .cell small { font-size: 9px; letter-spacing: 2px; color: var(--line); }
   .cell b { font-weight: 600; letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -217,6 +238,12 @@
   .findings i { font-style: normal; font-weight: 700; letter-spacing: 1px; }
   .findings .error i { color: var(--error); } .findings .warning i { color: var(--warn); } .findings .info i { color: var(--accent); }
   table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .bom th { width: auto; font-size: 9px; letter-spacing: 1px; border-bottom: 1px solid var(--rule); }
+  .bom td { vertical-align: top; }
+  .bom td b { display: block; font-weight: 600; }
+  .bom td small { display: block; color: var(--line); font-size: 10px; }
+  .bom .n { text-align: right; white-space: nowrap; padding-left: 6px; }
+  .bom tfoot td { padding-top: 8px; font-weight: 700; color: var(--copper); border-bottom: none; }
   th { text-align: left; color: var(--accent); font-weight: 600; padding: 4px 8px 4px 0; vertical-align: top; width: 48px; }
   td { padding: 4px 0; border-bottom: 1px dashed var(--faint); word-break: break-word; }
 
@@ -226,7 +253,7 @@
     .p-checks { grid-column: 3; grid-row: 1 / 3; }
   }
   @media (max-width: 900px) {
-    .titleblock { grid-template-columns: 1fr auto; }
+    .titleblock { grid-template-columns: 1fr auto auto; }
     .titleblock .meta, .titleblock .brand { display: none; }
     .tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--rule); }
     .tabs button { border: none; border-right: 1px solid var(--rule); padding: 10px 4px; }
