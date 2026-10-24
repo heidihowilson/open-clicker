@@ -51,3 +51,9 @@ Only label a device supported after recording its exact model/software and testi
 - The remote runs on a battery. The handheld form factor is the point, so sleep, wake-on-key and reconnect latency are core requirements, not polish.
 - It must support all three reference targets: the bedroom TCL BeyondTV4, the living-room TCL QM6K, and the Apple TVs. Per-target device profiles are required.
 - Four device profiles, selected by holding Home and pressing an arrow. Details in the [software plan](software-plan.md).
+
+## Owner direction, 2026-10-24
+
+- Open Remote is a design system with a web Designer: choose a chip, lay out keys, choose battery and shell, preview in 3D, export build files. One design file drives every output. See [Designer](designer.md).
+- The PCB targets the shared XIAO footprint so builders can choose the chip. Bare-chip choice is not fixed to the ESP32-C6.
+- IR transmit and receive are optional parts on the main board, not plug-in modules.
