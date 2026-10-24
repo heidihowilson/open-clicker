@@ -34,6 +34,7 @@ The phone Wi-Fi page is a bench tool, and Wi-Fi costs too much power for normal 
 ## Status
 
 - 2026-10-22: firmware v0.4 implements profiles, key-combination selection and pairing, and reconnect-on-press with the stale-key guard. Bench checks pass on the C6; no TV has been tested with profiles yet.
+- 2026-10-23, owner test: profiles 1 and 2 paired to two TVs, and switching between them worked several times. Profile 1 did not show as paired on the phone page. Cause: that TV already had a bond from v0.2, so pairing updated the existing entry, and the firmware only looked for a new one. Fixed by recording the authenticated peer first; the fix is built but not yet flashed.
 
 ## Order of work
 

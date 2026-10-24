@@ -40,7 +40,7 @@ static esp_bd_addr_t peers[PROFILES];
 static int pairing_profile=-1;
 static esp_ble_bond_dev_t bonds_before[CONFIG_BT_SMP_MAX_BONDS];
 static int bonds_before_n;
-static esp_bd_addr_t conn_peer;
+static esp_bd_addr_t conn_peer, auth_peer;
 
 /* Keyboard report 1: modifier, reserved, six keys. Consumer report 2:
  * one 16-bit usage. Report IDs are passed separately to esp_hidd. */
@@ -124,7 +124,10 @@ static void gap_event(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *p) {
         ESP_LOGI(TAG,"PAIRING: host entry code %06" PRIu32,p->ble_security.key_notif.passkey); break;
     case ESP_GAP_BLE_AUTH_CMPL_EVT:
         authenticated=p->ble_security.auth_cmpl.success;
-        if(authenticated) bonded=true;
+        if(authenticated) {
+            portENTER_CRITICAL(&pair_lock); memcpy(auth_peer,p->ble_security.auth_cmpl.bd_addr,6); portEXIT_CRITICAL(&pair_lock);
+            bonded=true;
+        }
         portENTER_CRITICAL(&pair_lock); pending_auth=0; portEXIT_CRITICAL(&pair_lock);
         ESP_LOGI(TAG,"Authentication success=%d reason=%u",p->ble_security.auth_cmpl.success,p->ble_security.auth_cmpl.fail_reason);
         break;
@@ -239,25 +242,31 @@ static void pair_profile(int profile) {
     char message[96]; snprintf(message,sizeof(message),"PAIR_WINDOW %d seconds; select Open Remote %d on the TV",PAIRING_SECONDS,profile+1);
     result(message);
 }
-/* Called from the main loop after a successful authentication: the new bond belongs to the
- * profile that opened pairing. */
+/* Called from the main loop after a successful authentication: the bond belongs to the profile
+ * that opened pairing. A TV that was bonded before (for example to an older firmware identity)
+ * updates its existing bond entry, so look for the authenticated peer first and only fall back
+ * to the entry that is new since pairing opened. */
 static void record_bond(void) {
     if(pairing_profile<0) return;
     esp_ble_bond_dev_t *list=bond_scratch; int n=CONFIG_BT_SMP_MAX_BONDS;
     if(esp_ble_get_bond_device_list(&n,list)!=ESP_OK) return;
-    for(int i=0;i<n;i++) {
+    esp_bd_addr_t peer;
+    portENTER_CRITICAL(&pair_lock); memcpy(peer,auth_peer,6); portEXIT_CRITICAL(&pair_lock);
+    int found=-1;
+    for(int i=0;i<n && found<0;i++) if(!memcmp(list[i].bd_addr,peer,6)) found=i;
+    for(int i=0;i<n && found<0;i++) {
         bool known=false;
         for(int j=0;j<bonds_before_n;j++) if(!memcmp(list[i].bd_addr,bonds_before[j].bd_addr,6)) known=true;
-        if(known) continue;
-        memcpy(peers[pairing_profile],list[i].bd_addr,6);
-        paired_mask|=1<<pairing_profile;
-        save_profiles();
-        char message[96]; snprintf(message,sizeof(message),"PROFILE %d paired",pairing_profile+1);
-        result(message);
-        pairing_profile=-1;
-        portENTER_CRITICAL(&pair_lock); pairing_deadline=0; portEXIT_CRITICAL(&pair_lock);
-        return;
+        if(!known) found=i;
     }
+    if(found<0) { result("ERR paired, but the bond was not found; profile not saved"); return; }
+    memcpy(peers[pairing_profile],list[found].bd_addr,6);
+    paired_mask|=1<<pairing_profile;
+    save_profiles();
+    char message[96]; snprintf(message,sizeof(message),"PROFILE %d paired",pairing_profile+1);
+    result(message);
+    pairing_profile=-1;
+    portENTER_CRITICAL(&pair_lock); pairing_deadline=0; portEXIT_CRITICAL(&pair_lock);
 }
 static void profile_report(void) {
     for(int i=0;i<PROFILES;i++) {
