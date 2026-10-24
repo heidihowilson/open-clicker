@@ -43,3 +43,17 @@ The connected unit was identified as ESP32-C6 revision 0.0 with 8 MB flash, secu
 - Assembly: the owner is equipped for soldering. Hand wiring is the next prototype step; hot-swap sockets are not required.
 
 Switch family selection is not a released footprint. Verify manufacturer drawings and sample dimensions before creating the key PCB and switch plate.
+
+## Bench order for the chip comparison (approved 2026-10-24)
+
+To compare chips on one XIAO footprint and to measure real current:
+
+- 2 × Seeed XIAO ESP32-C3
+- 2 × Seeed XIAO ESP32-C6
+- 2 × Seeed XIAO nRF52840 (not the Sense variant)
+- 2–4 × 3.7 V LiPo cells, 300–500 mAh, about 30 × 20 × 6 mm, with leads
+- 940 nm IR LEDs, small NPN transistors or logic-level MOSFETs, and 38 kHz IR receivers
+- 1N4148 diodes for the key matrix, and 100 kΩ–200 kΩ resistors for battery dividers
+
+Record what actually arrives here; the list above is the plan, not the order record.
+

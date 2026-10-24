@@ -44,6 +44,10 @@ A failed check explains itself and suggests a fix. Profiles hold measured number
 
 Seed designs are design files in this repository. A contribution is a design file plus a build photo, reviewed like code. Shared changes stay open under CERN-OHL-S.
 
+## Status
+
+2026-10-24: the first slice is in [`designer/`](../designer/README.md): the design-file schema, profiles for the XIAO ESP32-C3, ESP32-C6 and nRF52840, a wake-aware pin planner, live checks, a 2D layout editor, a 3D preview, and design, keymap JSON and `keymap.h` export. Two seed designs: Classic column and Thumb arc. PCB, plate and shell export are next.
+
 ## First slice
 
 1. The design-file schema and the three XIAO chip profiles.
