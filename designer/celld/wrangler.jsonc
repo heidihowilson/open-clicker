@@ -1,0 +1,12 @@
+// Deploys to the self-hosted celld fleet "openremote" on CT 113, not Cloudflare.
+// scripts/build-celld.sh assembles this file, worker.js and the Vite build into designer/.celld/.
+{
+  "name": "open-remote-designer",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "html_handling": "none"
+  }
+}

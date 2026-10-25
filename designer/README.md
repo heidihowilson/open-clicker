@@ -10,6 +10,12 @@ bun run check    # svelte-check, strict TypeScript
 bun run build    # static site in dist/
 ```
 
+## Deploy
+
+Live at <https://openremote.sethgholson.com>, served by the celld fleet `openremote` (celld 0.4.0, CT 113, port 8092) as static assets plus `celld/worker.js`, which adds `/health` and sends page paths to `index.html`.
+
+Push `main` to the homelab remote to deploy: `git push homelab main`, where `homelab` is `deploy@192.168.0.19:/srv/git/open-remote.git`. The hook runs `scripts/build-celld.sh` (install, test, build, assemble `.celld/`) and then `celld-release deploy`. A failing test stops the deploy.
+
 ## What it knows
 
 - **Chips** (`src/lib/chips.ts`): XIAO ESP32-C3, ESP32-C6 and nRF52840 pin maps from the Seeed wiki, with wake, ADC and strapping flags. Current figures carry their source; vendor figures are marked, and our own measurements replace them.
