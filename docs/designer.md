@@ -48,6 +48,8 @@ Seed designs are design files in this repository. A contribution is a design fil
 
 2026-10-24: the first slice is in [`designer/`](../designer/README.md): the design-file schema, profiles for the XIAO ESP32-C3, ESP32-C6 and nRF52840, a wake-aware pin planner, live checks, a 2D layout editor, a 3D preview, and design, keymap JSON and `keymap.h` export. Two seed designs: Classic column and Thumb arc. PCB, plate and shell export are next.
 
+2026-10-24: published at <https://openremote.sethgholson.com> on the homelab celld fleet `openremote`; a push to the homelab remote deploys it. It now adds precise part models, an explode view down to purchasable parts, tap-to-focus, and three pricing tiers.
+
 ## First slice
 
 1. The design-file schema and the three XIAO chip profiles.

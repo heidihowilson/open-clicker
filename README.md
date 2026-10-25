@@ -1,5 +1,7 @@
 # Open Remote
 
+**Design your own remote: <https://openremote.sethgholson.com>** (source in [`designer/`](designer/README.md)).
+
 An open hardware streaming remote with low-profile mechanical keys, interchangeable key layouts, and printable enclosures. Open Remote is a working project name.
 
 The intended product is a tested electronics kit that people can buy assembled or manufacture from the published designs. It should work with a documented reference device and remain straightforward to extend to others.
