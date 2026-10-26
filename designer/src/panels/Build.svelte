@@ -8,6 +8,7 @@
   import type { Finding } from "../lib/checks";
   import type { Design } from "../lib/design";
   import type { PricingAssumptions, Tier } from "../lib/pricing";
+  import { routeBoard } from "../lib/router";
 
   let { design, level = $bindable(), assumptions = $bindable(), options, findings, theme = $bindable(), notice, onExport, onImport, onShowKey }: {
     design: Design; level: Tier["id"]; assumptions: PricingAssumptions; options: Tier[]; findings: Finding[];
@@ -18,6 +19,23 @@
   const errors = $derived(findings.filter((f) => f.level === "error"));
   const sorted = $derived([...findings].sort((a, b) => rank(a) - rank(b)));
   const chip = $derived(CHIPS[design.chip]);
+  let routing = $state(false);
+  let routeStatus = $state("");
+  let routeError = $state("");
+  async function route() {
+    routing = true; routeError = ""; routeStatus = "Sending the design…";
+    try {
+      const { zip, report } = await routeBoard($state.snapshot(design) as Design, (t) => (routeStatus = t));
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(zip);
+      a.download = `${design.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "open-clicker"}-routed.zip`;
+      a.click(); URL.revokeObjectURL(a.href);
+      routeStatus = report.unrouted
+        ? `Routed in ${report.seconds} s, but ${report.unrouted} connections need a hand in KiCad before ordering.`
+        : `Routed in ${report.seconds} s and the board passed its checks. Upload the Gerber zip inside to JLCPCB.`;
+    } catch (e) { routeError = e instanceof Error ? e.message : String(e); routeStatus = ""; }
+    finally { routing = false; }
+  }
   function rank(f: Finding) { return f.level === "error" ? 0 : f.level === "warning" ? 1 : 2; }
   const blocked = $derived(errors[0]?.message ?? "");
 </script>
@@ -75,17 +93,23 @@
     </ul>
   </section>
 
+  <section id="build-board">
+    <h2>Circuit board</h2>
+    <button class="oc-btn oc-btn-primary" disabled={!!blocked || routing} onclick={route}>{routing ? "Routing…" : "Route and get Gerbers"}</button>
+    <p class="small" class:alert={!!routeError}>{routeError || routeStatus || "Draws every copper trace and returns the files a board maker like JLCPCB asks for, with order steps. Usually under two minutes."}</p>
+  </section>
+
   <section id="build-export">
     <h2>Export</h2>
     {#if blocked}<p class="small alert">{blocked}</p>{/if}
     <div class="exports">
-      <button class="oc-btn oc-btn-primary" disabled={!!blocked} onclick={() => onExport("kicad")}>KiCad project</button>
+      <button class="oc-btn" disabled={!!blocked} onclick={() => onExport("kicad")}>KiCad project</button>
       <button class="oc-btn" disabled={!!blocked} onclick={() => onExport("keymap")}>Keymap</button>
       <button class="oc-btn" disabled={!!blocked || chip.firmware !== "esp-idf"} title={chip.firmware !== "esp-idf" ? "No firmware for this controller yet." : ""} onclick={() => onExport("header")}>keymap.h</button>
       <button class="oc-btn" onclick={() => onExport("layout")}>Layout file</button>
       <label class="oc-btn">Open a layout<input type="file" accept="application/json,.json" onchange={onImport} hidden /></label>
     </div>
-    <p class="small">The KiCad project has the schematic and the board, every part placed and wired by net. Route the traces, then order it. The shell STL files come next.</p>
+    <p class="small">The KiCad project is the same board before routing, for anyone who wants to route it by hand. The shell STL files come next.</p>
     {#if notice}<p class="small alert">{notice}</p>{/if}
   </section>
 

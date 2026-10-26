@@ -16,8 +16,13 @@ if not pcbnew.ExportSpecctraDSN(board, dsn):
     sys.exit("Could not export the board for the router.")
 
 started = time.time()
-run = subprocess.run([router, "--gui.enabled=false", "-de", dsn, "-do", ses, "-mp", "20", "-mt", "2"],
-                     capture_output=True, text=True, timeout=limit)
+# The optimizer only tidies finished routes; on grove's two cores it can take minutes, so it is
+# off. Routing alone completes every template in seconds with no clearance violations.
+try:
+    run = subprocess.run([router, "--gui.enabled=false", "--router.optimizer.enabled=false", "-de", dsn, "-do", ses, "-mp", "20"],
+                         capture_output=True, text=True, timeout=limit)
+except subprocess.TimeoutExpired:
+    sys.exit("The router ran out of time on this board. Try fewer keys or a wider layout.")
 if run.returncode != 0:
     sys.exit("The router stopped with an error.")
 seconds = round(time.time() - started, 1)
