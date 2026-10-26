@@ -1,4 +1,6 @@
 /* A minimal zip writer (stored, no compression): enough to hand over a KiCad project folder. */
+/* DOS timestamp for 2026-01-01 00:00; a zero date reads as month 0 in some tools. */
+const DOS_DATE = ((2026 - 1980) << 9) | (1 << 5) | 1;
 const CRC = (() => {
   const t = new Uint32Array(256);
   for (let i = 0; i < 256; i++) { let c = i; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[i] = c >>> 0; }
@@ -10,18 +12,18 @@ function crc32(data: Uint8Array): number {
   return (c ^ 0xffffffff) >>> 0;
 }
 
-export function zip(files: Record<string, string>): Uint8Array<ArrayBuffer> {
+export function zip(files: Record<string, string | Uint8Array>): Uint8Array<ArrayBuffer> {
   const enc = new TextEncoder();
   const chunks: Uint8Array[] = [], central: Uint8Array[] = [];
   let offset = 0;
   for (const [name, text] of Object.entries(files)) {
-    const path = enc.encode(name), data = enc.encode(text), crc = crc32(data);
+    const path = enc.encode(name), data = typeof text === "string" ? enc.encode(text) : text, crc = crc32(data);
     const local = new Uint8Array(30 + path.length), lv = new DataView(local.buffer);
-    lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0x0800, true);
+    lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0x0800, true); lv.setUint16(12, DOS_DATE, true);
     lv.setUint32(14, crc, true); lv.setUint32(18, data.length, true); lv.setUint32(22, data.length, true); lv.setUint16(26, path.length, true);
     local.set(path, 30);
     const head = new Uint8Array(46 + path.length), cv = new DataView(head.buffer);
-    cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true); cv.setUint16(8, 0x0800, true);
+    cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true); cv.setUint16(8, 0x0800, true); cv.setUint16(14, DOS_DATE, true);
     cv.setUint32(16, crc, true); cv.setUint32(20, data.length, true); cv.setUint32(24, data.length, true); cv.setUint16(28, path.length, true);
     cv.setUint32(42, offset, true);
     head.set(path, 46);
