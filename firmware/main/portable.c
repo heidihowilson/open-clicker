@@ -130,7 +130,7 @@ void portable_start(void) {
     for(int i=0;i<16;i++) snprintf(token+2*i,3,"%02x",secret[i]);
     ESP_ERROR_CHECK(esp_read_mac(mac,ESP_MAC_WIFI_SOFTAP));
     wifi_config_t config={.ap={.channel=1,.authmode=WIFI_AUTH_WPA2_PSK,.max_connection=2,.pmf_cfg={.required=false}}};
-    snprintf((char *)config.ap.ssid,sizeof(config.ap.ssid),"OpenRemote-%02X%02X",mac[4],mac[5]);
+    snprintf((char *)config.ap.ssid,sizeof(config.ap.ssid),"OpenClicker-%02X%02X",mac[4],mac[5]);
     config.ap.ssid_len=strlen((char *)config.ap.ssid);
     memcpy(config.ap.password,password,sizeof(password));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP,&config));

@@ -1,6 +1,6 @@
-# Working on Open Remote
+# Working on Open Clicker
 
-The source is public at <https://github.com/heidihowilson/open-remote>. Do not publish packages or upload manufacturing files until the owner requests it. Licenses have not yet been selected.
+The source is public at <https://github.com/heidihowilson/open-clicker>. Do not publish packages or upload manufacturing files until the owner requests it.
 
 ## Development
 

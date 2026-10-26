@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  export type ExportKind = "layout" | "keymap" | "header" | "netlist";
+  export type ExportKind = "layout" | "keymap" | "header" | "kicad";
 </script>
 
 <script lang="ts">
@@ -7,12 +7,10 @@
   import { CHIPS } from "../lib/chips";
   import type { Finding } from "../lib/checks";
   import type { Design } from "../lib/design";
-  import type { PinPlan, PinPlanFailure } from "../lib/matrix";
-  import { designators } from "../lib/netlist";
   import type { PricingAssumptions, Tier } from "../lib/pricing";
 
-  let { design, level = $bindable(), assumptions = $bindable(), options, findings, plan, theme = $bindable(), notice, onExport, onImport, onShowKey }: {
-    design: Design; level: Tier["id"]; assumptions: PricingAssumptions; options: Tier[]; findings: Finding[]; plan: PinPlan | PinPlanFailure;
+  let { design, level = $bindable(), assumptions = $bindable(), options, findings, theme = $bindable(), notice, onExport, onImport, onShowKey }: {
+    design: Design; level: Tier["id"]; assumptions: PricingAssumptions; options: Tier[]; findings: Finding[];
     theme: string; notice: string; onExport: (k: ExportKind) => void; onImport: (e: Event) => void; onShowKey: (id: string) => void;
   } = $props();
 
@@ -20,14 +18,6 @@
   const errors = $derived(findings.filter((f) => f.level === "error"));
   const sorted = $derived([...findings].sort((a, b) => rank(a) - rank(b)));
   const chip = $derived(CHIPS[design.chip]);
-  const refs = $derived(plan.ok ? designators(design, plan).keys : null);
-  /* The matrix as a grid of switch designators: [row][column]. */
-  const grid = $derived.by(() => {
-    if (!plan.ok || !refs) return [];
-    const g: (string | null)[][] = plan.rows.map(() => plan.columns.map(() => null));
-    for (const r of refs.values()) g[r.row]![r.col] = r.sw;
-    return g;
-  });
   function rank(f: Finding) { return f.level === "error" ? 0 : f.level === "warning" ? 1 : 2; }
   const blocked = $derived(errors[0]?.message ?? "");
 </script>
@@ -85,42 +75,17 @@
     </ul>
   </section>
 
-  <section>
-    <details>
-      <summary>Pins and matrix</summary>
-      {#if plan.ok}
-        <dl class="pins">
-          <dt>Columns</dt><dd>{plan.columns.map((p, i) => `COL${i} ${p.id}`).join(" · ")}</dd>
-          <dt>Rows</dt><dd>{plan.rows.map((p, i) => `ROW${i} ${p.id}`).join(" · ")}</dd>
-          {#if plan.battery}<dt>Battery</dt><dd>VBAT_SENSE {plan.battery.id}</dd>{/if}
-          {#if plan.irTransmit}<dt>IR out</dt><dd>IR_TX {plan.irTransmit.id}</dd>{/if}
-          {#if plan.irReceive}<dt>IR in</dt><dd>IR_RX {plan.irReceive.id}</dd>{/if}
-          <dt>Spare</dt><dd>{plan.spare.map((p) => p.id).join(" · ") || "none"}</dd>
-        </dl>
-        <div class="matrix" style={`grid-template-columns: auto repeat(${plan.columns.length}, 1fr)`}>
-          <span></span>{#each plan.columns as _, c}<span class="head">C{c}</span>{/each}
-          {#each grid as row, r}
-            <span class="head">R{r}</span>{#each row as sw}<span class="cell" class:empty={!sw}>{sw ?? "·"}</span>{/each}
-          {/each}
-        </div>
-        <p class="small">Columns sit on wake pins, so any key wakes the {chip.label}. Each key has a 1N4148W diode, column to row. Kailh Choc V1 in hot-swap sockets, 18 × 17 mm pitch, 2 mm walls.</p>
-      {:else}
-        <p class="small alert">{plan.reason}</p>
-      {/if}
-    </details>
-  </section>
-
   <section id="build-export">
     <h2>Export</h2>
     {#if blocked}<p class="small alert">{blocked}</p>{/if}
     <div class="exports">
-      <button class="oc-btn" onclick={() => onExport("layout")}>Layout file</button>
-      <button class="oc-btn" disabled={!!blocked} onclick={() => onExport("netlist")}>Netlist</button>
+      <button class="oc-btn oc-btn-primary" disabled={!!blocked} onclick={() => onExport("kicad")}>KiCad project</button>
       <button class="oc-btn" disabled={!!blocked} onclick={() => onExport("keymap")}>Keymap</button>
       <button class="oc-btn" disabled={!!blocked || chip.firmware !== "esp-idf"} title={chip.firmware !== "esp-idf" ? "No firmware for this controller yet." : ""} onclick={() => onExport("header")}>keymap.h</button>
+      <button class="oc-btn" onclick={() => onExport("layout")}>Layout file</button>
       <label class="oc-btn">Open a layout<input type="file" accept="application/json,.json" onchange={onImport} hidden /></label>
     </div>
-    <p class="small">The netlist is the schematic as data. The KiCad board and the STL files come next.</p>
+    <p class="small">The KiCad project has the schematic and the board, every part placed and wired by net. Route the traces, then order it. The shell STL files come next.</p>
     {#if notice}<p class="small alert">{notice}</p>{/if}
   </section>
 
@@ -148,13 +113,6 @@
   .checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); font-size: 15px; line-height: 20px; }
   .checks li { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
   .checks .oc-btn-link { height: auto; font-size: 14px; }
-  .pins { margin: 0 0 var(--space-3); display: grid; grid-template-columns: auto 1fr; gap: 4px var(--space-3); font: 500 13px/20px var(--font-mono); }
-  .pins dt { color: var(--ink-muted); font-family: var(--font-sans); }
-  .pins dd { margin: 0; }
-  .matrix { display: grid; gap: 2px; margin-bottom: var(--space-3); font: 600 12px/28px var(--font-mono); text-align: center; }
-  .matrix .head { color: var(--ink-muted); }
-  .matrix .cell { background: var(--well); border-radius: var(--radius-xs); }
-  .matrix .cell.empty { opacity: 0.4; }
   .exports { display: flex; flex-wrap: wrap; gap: var(--space-2); }
   @media (min-width: 1100px) { .theme { display: none; } }
 </style>

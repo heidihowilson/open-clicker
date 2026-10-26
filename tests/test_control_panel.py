@@ -74,7 +74,7 @@ class PanelTest(unittest.TestCase):
 
     def test_status_from_device_and_pin(self):
         self.assertEqual(self.request('pin 012345')[0],200)
-        os.write(self.master,b'STATUS name=Open Remote C6 connected=1 authenticated=1 advertising=0 ready=1 bonds=1\n')
+        os.write(self.master,b'STATUS name=Open Clicker C6 connected=1 authenticated=1 advertising=0 ready=1 bonds=1\n')
         time.sleep(.3)
         with urlopen(self.origin+'/api/log') as r:data=json.load(r)
         self.assertIn('authenticated',data['status'])

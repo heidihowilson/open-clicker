@@ -21,16 +21,18 @@ export interface Netlist {
   nets: string[];
 }
 
-const FOOTPRINTS = {
-  xiao: "OpenClicker:XIAO-14",
+/* Footprint names. Every pad is drawn by kicad.ts, so the board needs no library. */
+export const FOOTPRINTS = {
+  xiao: "OpenClicker:XIAO_Back",
   switch: "OpenClicker:Choc_V1_Hotswap",
-  diode: "Diode_SMD:D_SOD-123",
-  battery: "Connector_JST:JST_PH_S2B-PH-SM4-TB_1x02-1MP_P2.00mm_Horizontal",
-  r0805: "Resistor_SMD:R_0805_2012Metric",
-  c0805: "Capacitor_SMD:C_0805_2012Metric",
-  irLed: "LED_THT:LED_D5.0mm_IRGrey",
-  sot23: "Package_TO_SOT_SMD:SOT-23",
-  irReceiver: "OptoDevice:Vishay_MOLD-3Pin",
+  diode: "OpenClicker:D_SOD-123",
+  battery: "OpenClicker:JST_PH_B2B-PH-K_Vertical",
+  batteryLink: "OpenClicker:Wire_Pads_2",
+  r0805: "OpenClicker:R_0805",
+  c0805: "OpenClicker:C_0805",
+  irLed: "OpenClicker:LED_D3.0mm",
+  sot23: "OpenClicker:SOT-23",
+  irReceiver: "OpenClicker:IR_Receiver_3Pin",
 } as const;
 
 export interface Designators {
@@ -55,7 +57,7 @@ export function netlist(design: Design): Netlist {
   const parts: Part[] = [];
 
   /* The controller: every used pin on its net, the rest unconnected. */
-  const xiao: Record<string, string> = { "3V3": "3V3", GND: "GND", "BAT+": "VBAT", "BAT-": "GND" };
+  const xiao: Record<string, string> = { "3V3": "3V3", GND: "GND" };
   const on = (pin: Pin | null, net: string) => { if (pin) xiao[pin.id] = net; };
   plan.columns.forEach((p, i) => on(p, `COL${i}`));
   plan.rows.forEach((p, i) => on(p, `ROW${i}`));
@@ -72,7 +74,9 @@ export function netlist(design: Design): Netlist {
     parts.push({ ref: r.d, value: "1N4148W", footprint: FOOTPRINTS.diode, pins: { A: node, K: `ROW${r.row}` }, keyId: k.id });
   }
 
+  /* The cell plugs into J1; two short wires from J2 reach the BAT pads under the XIAO. */
   parts.push({ ref: "J1", value: "Battery, JST-PH 2-pin", footprint: FOOTPRINTS.battery, pins: { "1": "VBAT", "2": "GND" } });
+  parts.push({ ref: "J2", value: "Wire to XIAO BAT pads", footprint: FOOTPRINTS.batteryLink, pins: { "1": "VBAT", "2": "GND" } });
 
   if (design.options.irTransmit) {
     /* A low-side NPN switch drives the LED from 3V3; R1 sets about 100 mA pulses. */

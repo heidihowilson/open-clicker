@@ -4,7 +4,6 @@
   import type { Finding } from "../lib/checks";
   import { PITCH, readingOrder, type Design, type Key, type TemplateId } from "../lib/design";
   import type { PinPlan, PinPlanFailure } from "../lib/matrix";
-  import { designators } from "../lib/netlist";
 
   let { design = $bindable(), selected = $bindable(), plan, findings, capacity, templates, onTemplate, onDone }: {
     design: Design; selected: string | null; plan: PinPlan | PinPlanFailure; findings: Finding[]; capacity: number;
@@ -14,7 +13,6 @@
   let half = $state(false);
   const key = $derived(design.keys.find((k) => k.id === selected) ?? null);
   const ordered = $derived(readingOrder(design.keys));
-  const refs = $derived(plan.ok ? designators(design, plan).keys : null);
   const keyFindings = $derived(key ? findings.filter((f) => f.keyId === key.id && f.level !== "info") : []);
 
   function nudge(dx: number, dy: number) {
@@ -29,17 +27,13 @@
     selected = null;
     onDone();
   }
-  const refLine = (k: Key) => {
-    const r = refs?.get(k.id);
-    return r ? `${r.sw} · ${r.d} · row ${r.row + 1}, col ${r.col + 1}` : "not wired: too many keys";
-  };
 </script>
 
 <div class="pane">
   {#if key}
     <div>
       <h1>{ACTION_INFO[key.action].name}</h1>
-      <p class="meta ref">key {ordered.indexOf(key) + 1} of {design.keys.length} · {refLine(key)}</p>
+      <p class="meta">key {ordered.indexOf(key) + 1} of {design.keys.length}</p>
     </div>
     {#each keyFindings as f}<p class="small" class:alert={f.level === "error"}>{f.message}</p>{/each}
     <label class="oc-field">
@@ -103,7 +97,6 @@
               {#if legend.glyph}<img src={glyphUrl(legend.glyph, capColour(k.action) === "ivory" ? "oxblood" : "ivory")} alt="" width="14" height="14" />{:else}{legend.text}{/if}
             </span>
             <span class="name">{ACTION_INFO[k.action].name}{k.w > 1 ? ` · ${k.w}u` : ""}</span>
-            <span class="ref oc-badge oc-badge-mono">{refs?.get(k.id)?.sw ?? "—"}</span>
           </button></li>
         {/each}
       </ul>
@@ -112,7 +105,6 @@
 </div>
 
 <style>
-  .ref { font-family: var(--font-mono); }
   /* Done stays in reach while the inspector scrolls. */
   .actions { position: sticky; bottom: calc(-1 * var(--pad)); margin: 0 calc(-1 * var(--pad)); padding: var(--space-2) var(--pad) var(--space-3);
     background: var(--ground-raised); border-top: 1px solid var(--line); z-index: 1; }

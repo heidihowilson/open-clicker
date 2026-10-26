@@ -1,8 +1,8 @@
-# Open Remote
+# Open Clicker
 
 **Design your own remote: <https://openremote.sethgholson.com>** (source in [`designer/`](designer/README.md)).
 
-An open hardware streaming remote with low-profile mechanical keys, interchangeable key layouts, and printable enclosures. Open Remote is a working project name.
+An open hardware streaming remote with low-profile mechanical keys, interchangeable key layouts, and printable enclosures. The project was called Open Remote until 2026-10-26; the domain and some infrastructure names still say openremote.
 
 The intended product is a tested electronics kit that people can buy assembled or manufacture from the published designs. It should work with a documented reference device and remain straightforward to extend to others.
 
@@ -48,7 +48,7 @@ Device credentials, backups, logs and installed tools are excluded from Git.
 - [Enclosure prototype requirements](enclosures/README.md)
 - [Firmware build and local control panel](firmware/README.md)
 - [Prototype milestones and acceptance checks](docs/prototype-plan.md)
-- [Open Remote Designer: the web app and its design file](docs/designer.md)
+- [Open Clicker designer: the web app and its design file](docs/designer.md)
 - [Software plan: profiles, reconnect, sleep and pairing](docs/software-plan.md)
 - [Decisions and unresolved questions](docs/decisions.md)
 - [Manufacturing and open release](docs/release-plan.md)

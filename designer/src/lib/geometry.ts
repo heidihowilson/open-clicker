@@ -67,3 +67,26 @@ export function cellOf(design: Design, key: Key): { col: number; row: number } {
   const depth = KEYCAPS[design.keycap].depthMm;
   return { col: Math.round((key.x - capWidth(key.w) / 2 - f.minX) / 18) + 1, row: Math.round((key.y - depth / 2 - f.minY) / 17) + 1 };
 }
+
+/* Where the small parts go, shared by the 3D model and the KiCad board. The IR LED and
+ * receiver sit on the top edge; everything else sits in the chin beside the XIAO, clear of
+ * the switch sockets. */
+export function partSpots(design: Design, bounds: Bounds): Record<string, Point> {
+  const xiao = xiaoPlacement(bounds);
+  const cx = (bounds.minX + bounds.maxX) / 2, edge = bounds.minY;
+  const side = XIAO.widthMm / 2 + 3.5;
+  const ledX = cx - (design.options.irReceive ? 5 : 0), rxX = cx + (design.options.irTransmit ? 5 : 0);
+  return {
+    U1: xiao,
+    J1: { x: xiao.x - side, y: xiao.y - 4 },
+    J2: { x: xiao.x - side, y: xiao.y + 4 },
+    R3: { x: xiao.x + side, y: xiao.y - 2 },
+    R4: { x: xiao.x + side, y: xiao.y + 2 },
+    LED1: { x: ledX, y: edge + 3 },
+    R1: { x: xiao.x + side + 5, y: xiao.y - 5 },
+    Q1: { x: xiao.x + side + 5, y: xiao.y - 1 },
+    R2: { x: xiao.x + side + 5, y: xiao.y + 3 },
+    U2: { x: rxX, y: edge + 4 },
+    C1: { x: rxX + 5.5, y: edge + 3 },
+  };
+}

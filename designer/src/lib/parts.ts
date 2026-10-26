@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { capWidth, KEYCAPS, type Design, type Key } from "./design";
-import { boardBounds, keyField, SHELL_RULES, xiaoPlacement, type Bounds } from "./geometry";
+import { boardBounds, keyField, partSpots, SHELL_RULES, xiaoPlacement, type Bounds } from "./geometry";
 import { CHOC, DIODE, IR, MBK, PCB, SHELL, XIAO_BOARD } from "./parts-data";
 import { CHIPS } from "./chips";
 import { capColour, glyphUrl, legendOf } from "./actions";
@@ -231,23 +231,23 @@ export function buildBattery(design: Design, bounds: Bounds): THREE.Group {
 export function buildIr(design: Design, bounds: Bounds): THREE.Group | null {
   if (!design.options.irTransmit && !design.options.irReceive) return null;
   const g = new THREE.Group();
-  const cx = (bounds.minX + bounds.maxX) / 2, edge = bounds.minY;
+  const spots = partSpots(design, bounds);
   if (design.options.irTransmit) {
     const led = new THREE.Group();
     const body = cylinder(IR.ledDiameter, IR.ledLength - IR.ledDiameter / 2, "led");
     body.rotation.x = Math.PI / 2; body.position.z = -0.5; led.add(body);
     const dome = mesh(new THREE.SphereGeometry(IR.ledDiameter / 2, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), "led");
     dome.rotation.x = -Math.PI / 2; dome.position.z = -(IR.ledLength - IR.ledDiameter / 2) / 2 - 0.5; led.add(dome);
-    led.position.set(cx - (design.options.irReceive ? 5 : 0), 2, edge + 3);
+    led.position.set(spots.LED1!.x, 2, spots.LED1!.y);
     g.add(item(led, "ir-led"));
-    /* Driver transistor and its two resistors sit on the back, behind the LED. */
-    const driver = box(2.9, 1.0, 1.3, "chip", led.position.x, -PCB.thickness - 0.5, edge + 9);
+    /* Driver transistor and its two resistors sit on the back, in the chin beside the XIAO. */
+    const driver = box(1.3, 1.0, 2.9, "chip", spots.Q1!.x, -PCB.thickness - 0.5, spots.Q1!.y);
     g.add(item(driver, "ir-driver"));
-    for (const dx of [-3.2, 3.2]) g.add(item(smdResistor(led.position.x + dx, edge + 9), "resistor"));
+    for (const ref of ["R1", "R2"]) g.add(item(smdResistor(spots[ref]!.x, spots[ref]!.y), "resistor"));
   }
   if (design.options.irReceive) {
     const r = IR.receiver;
-    g.add(item(box(r.width, r.height, r.depth, "plastic-dark", cx + (design.options.irTransmit ? 5 : 0), r.height / 2, edge + 2 + r.depth / 2), "ir-receiver"));
+    g.add(item(box(r.width, r.height, r.depth, "plastic-dark", spots.U2!.x, r.height / 2, spots.U2!.y), "ir-receiver"));
   }
   return g;
 }
@@ -263,9 +263,9 @@ function smdResistor(x: number, z: number): THREE.Group {
 /* Battery divider: two resistors beside the XIAO when the module has none built in. */
 export function buildDivider(design: Design, bounds: Bounds): THREE.Group | null {
   if (!design.options.batterySense || CHIPS[design.chip].batteryDividerBuiltIn) return null;
-  const at = xiaoPlacement(bounds);
+  const spots = partSpots(design, bounds);
   const g = new THREE.Group();
-  for (const dz of [-2, 2]) g.add(item(smdResistor(at.x + XIAO_BOARD.halfWidth + 3, at.y + dz), "resistor"));
+  for (const ref of ["R3", "R4"]) g.add(item(smdResistor(spots[ref]!.x, spots[ref]!.y), "resistor"));
   return g;
 }
 

@@ -28,7 +28,7 @@ Open the local panel at `http://127.0.0.1:8766`. It is bound to loopback and req
 
 ## Portable testing beside a TV
 
-Power the C6 from a USB power bank or USB wall charger. On your phone, join the `OpenRemote-XXXX` network. Its device-specific password is generated once and stored in NVS; the serial startup line `PORTABLE_READY` prints it for setup. Keep credentials in ignored local notes, not in published source.
+Power the C6 from a USB power bank or USB wall charger. On your phone, join the `OpenClicker-XXXX` network. Its device-specific password is generated once and stored in NVS; the serial startup line `PORTABLE_READY` prints it for setup. Keep credentials in ignored local notes, not in published source.
 
 Open **http://192.168.4.1/** in the phone browser. This Wi-Fi network intentionally has no internet; choose to stay connected if the phone asks. The page runs entirely on the C6. The computer and property Wi-Fi are not needed beside the TV.
 
@@ -36,9 +36,9 @@ This is a temporary testing interface. Wi-Fi and BLE run together with ESP-IDF s
 
 ## Pair and test
 
-1. Choose a profile, then tap **Pair this profile**. The board advertises as **Open Remote N** for two minutes.
+1. Choose a profile, then tap **Pair this profile**. The board advertises as **Open Clicker N** for two minutes.
 2. On the TCL, select Settings → Remote & Accessories → Pair remote or accessory.
-3. Select Open Remote N. If a six-digit code appears, submit it in the panel. If numeric comparison is requested instead, confirm only matching codes.
+3. Select Open Clicker N. If a six-digit code appears, submit it in the panel. If numeric comparison is requested instead, confirm only matching codes.
 4. Wait for authenticated status, then test individual directions and OK.
 5. Test Back, Home, and Play/Pause separately in the launcher and a playback app. Escape and Space are alternative test commands, not automatic fallbacks.
 
@@ -66,14 +66,14 @@ Home and Back passed in the owner-reported [first TV test](../docs/tests/2026-10
 
 ## Profiles
 
-Firmware v0.4 holds four profiles, one per TV. Each profile advertises from its own static random Bluetooth address and name (`Open Remote 1` to `Open Remote 4`), so a TV paired to one profile does not recognise the others.
+Firmware v0.4 holds four profiles, one per TV. Each profile advertises from its own static random Bluetooth address and name (`Open Clicker 1` to `Open Clicker 4`), so a TV paired to one profile does not recognise the others.
 
 - **Select:** hold Home and press Up (1), Right (2), Down (3) or Left (4). The phone page has profile buttons; serial uses `profile 1` to `profile 4`.
 - **Pair:** hold Home and the arrow for 3 seconds, tap **Pair this profile** on the phone, or send `profile pair N`. Pairing replaces that profile's previous TV only.
 - **Reconnect:** selecting a paired profile, or pressing any key while disconnected, advertises for 30 seconds. The key that started the reconnect is discarded, not sent late.
 - `profile` lists each profile's address and whether it is paired. Profiles persist in NVS.
 
-A bond made before v0.4 used the board's public address. Remove the old **Open Remote C6** entry on that TV and pair it again to a profile.
+A bond made before v0.4 used the board's public address. Remove the old **Open Remote C6** or **Open Clicker C6** entry on that TV and pair it again to a profile.
 
 ## Physical keys
 

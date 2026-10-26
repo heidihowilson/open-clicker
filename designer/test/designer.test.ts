@@ -7,7 +7,9 @@ import { capColour } from "../src/lib/actions";
 import { bom, bomTotal } from "../src/lib/bom";
 import { check, errorsIn } from "../src/lib/checks";
 import { parseDesign, readingOrder, type Design } from "../src/lib/design";
+import { kicadProject } from "../src/lib/kicad";
 import { keyCapacity, netlist } from "../src/lib/netlist";
+import { zip } from "../src/lib/zip";
 import { keymap, keymapHeader } from "../src/lib/exports";
 import { boardBounds, collisions, keyField } from "../src/lib/geometry";
 import { planPins } from "../src/lib/matrix";
@@ -138,4 +140,17 @@ test("key capacity matches the planner", () => {
   const cap = keyCapacity(tile);
   expect(cap).toBeGreaterThanOrEqual(tile.keys.length);
   expect(planPins({ ...tile, keys: Array.from({ length: cap + 1 }, (_, i) => ({ id: `k${i}`, x: i * 18, y: 0, w: 1 as const, action: "none" as const, label: "" })) }).ok).toBe(false);
+});
+
+test("the KiCad project is deterministic and places every part on the board", () => {
+  const a = kicadProject(tile), b = kicadProject(structuredClone(tile));
+  expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  const pcb = Object.entries(a.files).find(([n]) => n.endsWith(".kicad_pcb"))![1];
+  const sch = Object.entries(a.files).find(([n]) => n.endsWith(".kicad_sch"))![1];
+  const parts = netlist(tile).parts;
+  expect(pcb.match(/\(footprint /g)!.length).toBe(parts.length);
+  expect(sch.match(/\(symbol \(lib_id /g)!.length).toBe(parts.length);
+  expect(pcb).toContain('(layer "Edge.Cuts")');
+  const bytes = zip(a.files);
+  expect(new DataView(bytes.buffer).getUint32(0, true)).toBe(0x04034b50);
 });

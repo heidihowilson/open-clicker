@@ -1,4 +1,4 @@
-// openremote.sethgholson.com: the Open Remote Designer, served as static assets by celld.
+// openremote.sethgholson.com: the Open Clicker designer, served as static assets by celld.
 // The Designer is one page. The Worker adds a health route and sends extensionless paths,
 // including "/", to index.html (with html_handling "none", celld would 404 them).
 export default {

@@ -1,6 +1,6 @@
-# Open Remote Designer
+# Open Clicker designer
 
-Open Remote is a design system, not a single remote. The Designer is the web app that ties it together: choose a chip, place the keys where your thumb wants them, choose a battery and a shell, see the result in 3D, and get every file needed to build it. Ordering comes later.
+Open Clicker is a design system, not a single remote. The Designer is the web app that ties it together: choose a chip, place the keys where your thumb wants them, choose a battery and a shell, see the result in 3D, and get every file needed to build it. Ordering comes later.
 
 Owner direction, 2026-10-24. This document keeps hardware, firmware and the app aligned on one model.
 

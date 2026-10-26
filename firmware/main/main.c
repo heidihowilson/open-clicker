@@ -19,7 +19,7 @@
 #include "portable.h"
 #include "keys.h"
 
-#define NAME "Open Remote C6"
+#define NAME "Open Clicker C6"
 #define PROFILES 4
 #define RECONNECT_SECONDS 30
 #define PAIRING_SECONDS 120
@@ -60,7 +60,7 @@ static const uint8_t report_map[] = {
 static esp_hid_raw_report_map_t maps[] = {{.data=report_map,.len=sizeof(report_map)}};
 static const esp_hid_device_config_t hid_config = {
     .vendor_id=0, .product_id=0, .version=1, /* Unassigned prototype identifiers. */
-    .device_name=NAME, .manufacturer_name="Open Remote prototype", .serial_number="bench-01",
+    .device_name=NAME, .manufacturer_name="Open Clicker prototype", .serial_number="bench-01",
     .report_maps=maps, .report_maps_len=1
 };
 static esp_ble_adv_params_t adv_params = {
@@ -198,7 +198,7 @@ static bool use_identity(int profile) {
     esp_bd_addr_t address; profile_address(profile,address);
     addr_ready=false;
     if(esp_ble_gap_set_rand_addr(address)!=ESP_OK || !wait_for(&addr_ready,true,1000)) return false;
-    char name[24]; snprintf(name,sizeof(name),"Open Remote %d",profile+1);
+    char name[24]; snprintf(name,sizeof(name),"Open Clicker %d",profile+1);
     esp_ble_adv_data_t scan={.set_scan_rsp=true,.include_name=true};
     scan_ready=false;
     if(esp_ble_gap_set_device_name(name)!=ESP_OK || esp_ble_gap_config_adv_data(&scan)!=ESP_OK) return false;
@@ -239,7 +239,7 @@ static void pair_profile(int profile) {
     if(esp_ble_get_bond_device_list(&bonds_before_n,bonds_before)!=ESP_OK) bonds_before_n=0;
     pairing_profile=profile;
     start_advertising(PAIRING_SECONDS,true);
-    char message[96]; snprintf(message,sizeof(message),"PAIR_WINDOW %d seconds; select Open Remote %d on the TV",PAIRING_SECONDS,profile+1);
+    char message[96]; snprintf(message,sizeof(message),"PAIR_WINDOW %d seconds; select Open Clicker %d on the TV",PAIRING_SECONDS,profile+1);
     result(message);
 }
 /* Called from the main loop after a successful authentication: the bond belongs to the profile

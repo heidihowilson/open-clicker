@@ -1,6 +1,6 @@
-# Open Remote Designer
+# Open Clicker designer
 
-A browser app, drawn as a blueprint, that edits one Open Remote **design file**: the chip, key positions and actions, IR and battery options, and the shell. It checks the design against the chip's pin data while you edit, shows it in 2D and 3D, and exports the design, a keymap JSON, and the firmware `keymap.h`. See [docs/designer.md](../docs/designer.md) for the model.
+A browser app that edits one Open Clicker **design file**: the chip, key positions and actions, IR and battery options, and the shell. It checks the design against the chip's pin data while you edit, shows it in 2D and 3D, and exports a KiCad project (schematic and placed board), the design file, a keymap JSON and the firmware `keymap.h`. See [docs/designer.md](../docs/designer.md) for the model.
 
 ```sh
 bun install
@@ -37,3 +37,14 @@ The tool follows the **Open Clicker** design system in [`docs/brand/`](../docs/b
 ## Not yet
 
 PCB (KiCad), switch plate, shell and bill-of-materials export. The XIAO footprint, diode placement and routing need checking against the parts in hand before any of it is offered as a manufacturing file.
+
+## KiCad export
+
+`src/lib/kicad.ts` writes a KiCad 7 project (`.kicad_pro`, `.kicad_sch`, `.kicad_pcb`), zipped in the browser by `src/lib/zip.ts`. To check it against real KiCad:
+
+```sh
+bun scripts/kicad-check.ts /tmp/kicad-out      # every template, plus Tile with IR
+python3 scripts/kicad-verify.py /tmp/kicad-out  # schematic nets == board pad nets; DRC without shorts or overlaps
+```
+
+`kicad-verify.py` needs KiCad 7 or later (`kicad-cli` and the `pcbnew` Python module). Footprints are drawn inline, so DRC lists "footprint not in a library" notes; those are expected, as are the unrouted connections.

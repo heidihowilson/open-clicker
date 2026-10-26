@@ -54,6 +54,11 @@ Only label a device supported after recording its exact model/software and testi
 
 ## Owner direction, 2026-10-24
 
-- Open Remote is a design system with a web Designer: choose a chip, lay out keys, choose battery and shell, preview in 3D, export build files. One design file drives every output. See [Designer](designer.md).
+- Open Clicker (named Open Remote until 2026-10-26) is a design system with a web Designer: choose a chip, lay out keys, choose battery and shell, preview in 3D, export build files. One design file drives every output. See [Designer](designer.md).
 - The PCB targets the shared XIAO footprint so builders can choose the chip. Bare-chip choice is not fixed to the ESP32-C6.
 - IR transmit and receive are optional parts on the main board, not plug-in modules.
+
+## Owner decisions, 2026-10-26
+
+- The project is named **Open Clicker**. The repository is `heidihowilson/open-clicker`. The domain `openremote.sethgholson.com`, the celld fleet `openremote` and the homelab deploy paths keep the old name.
+- The designer exports a KiCad project: a schematic and a board with every part placed and every pad on its net. The netlist, pin plan and part designators are implementation details and stay out of the UI.
