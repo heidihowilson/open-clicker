@@ -1,7 +1,9 @@
 {
-  "schema": 2,
+  "schema": 3,
+  "id": "seed-slab-0001",
+  "revision": 0,
   "name": "Everyday Slab",
-  "template": "Slab",
+  "template": "slab",
   "chip": "xiao-nrf52840",
   "keycap": "choc-mcc",
   "options": {
@@ -14,6 +16,14 @@
     "lengthMm": 40,
     "widthMm": 25,
     "thicknessMm": 6
+  },
+  "circuit": {
+    "matrix": "col2row",
+    "switch": "choc-v1-hotswap",
+    "diode": "1n4148w-sod123",
+    "battery": "jst-ph-2",
+    "irLed": "ir-5mm-940",
+    "irReceiver": "tsop38238"
   },
   "keys": [
     {

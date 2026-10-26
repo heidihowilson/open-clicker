@@ -15,7 +15,8 @@
   let explode = $state(0);
   let target = $state(0);
   let focusCard = $state<{ line: BomLine; keyId: string | null } | null>(null);
-  let labels = $state(true);
+  /* Callouts crowd a phone screen; the focus card does their job there. */
+  let labels = $state(!matchMedia("(max-width: 759px)").matches);
   let view = $state<"iso" | "top" | "front" | "side">("iso");
 
   const GAP_MM = 14;
@@ -156,9 +157,11 @@
       const w = host.clientWidth, h = host.clientHeight, column = Math.min(220, w * 0.44);
       /* Slide the drawing left so the label column never covers a part. */
       const shift = show ? Math.round(column / 2 + 6) : 0;
-      if (shift !== shifted) {
-        shifted = shift;
-        if (shift) camera.setViewOffset(w, h, shift, 0, w, h); else camera.clearViewOffset();
+      /* Lift a focused part above the card docked at the bottom. */
+      const lift = focused ? Math.round(Math.min(150, h * 0.25)) : 0;
+      if (shift * 10000 + lift !== shifted) {
+        shifted = shift * 10000 + lift;
+        if (shift || lift) camera.setViewOffset(w, h, shift, lift, w, h); else camera.clearViewOffset();
       }
       if (!show) return;
       const items = callouts.map((c) => {
@@ -166,7 +169,7 @@
         point.set(box.max.x, (box.min.y + box.max.y) / 2, (box.min.z + box.max.z) / 2).project(camera);
         return { c, x: (point.x + 1) / 2 * w, y: (1 - point.y) / 2 * h };
       }).sort((a, b) => a.y - b.y);
-      const top = 64, bottom = h - 76, step = items.length > 1 ? Math.max(46, (bottom - top) / (items.length - 1)) : 0;
+      const top = 64, bottom = h - 80, step = items.length > 1 ? Math.max(46, (bottom - top) / (items.length - 1)) : 0;
       const left = w - column - 10;
       items.forEach((it, i) => {
         const y = Math.min(top + i * step, bottom);
@@ -234,13 +237,6 @@
   <div class="canvas" bind:this={host}></div>
   <svg class="leaders" bind:this={overlay} aria-hidden="true"></svg>
   <div class="tags" bind:this={tags}></div>
-  <div class="toolbar top">
-    <div class="oc-seg" role="radiogroup" aria-label="Camera">
-      {#each [["iso", "Iso"], ["top", "Top"], ["front", "Front"], ["side", "Side"]] as const as [v, name]}
-        <button class="oc-seg-opt" role="radio" aria-checked={view === v} onclick={() => (view = v)}>{name}</button>
-      {/each}
-    </div>
-  </div>
   {#if focusCard}
     <div class="card" role="status">
       <span class="eyebrow">{focusCard.line.kind === "buy" ? "Bought" : focusCard.line.kind === "print" ? "Printed" : "Made to order"}</span>
@@ -253,13 +249,14 @@
   {:else if explode > 0.5}
     <span class="oc-badge oc-badge-accent hint-pill">Tap a part to see it</span>
   {/if}
-  <div class="toolbar bottom">
-    <button class="oc-btn" class:oc-btn-primary={target === 0} onclick={() => setExplode(target === 0)}>{target === 1 ? "Put it back together" : "Explode"}</button>
-    <input type="range" min="0" max="1" step="0.01" value={target} oninput={(e) => (target = Number(e.currentTarget.value))} aria-label="How far apart" />
-    <div class="oc-seg" role="radiogroup" aria-label="Part labels">
-      <button class="oc-seg-opt" role="radio" aria-checked={labels} onclick={() => (labels = true)}>Labels</button>
-      <button class="oc-seg-opt" role="radio" aria-checked={!labels} onclick={() => (labels = false)}>Off</button>
+  <div class="toolbar">
+    <button class="oc-btn" class:oc-btn-primary={target === 0} onclick={() => setExplode(target === 0)}>{target === 1 ? "Assemble" : "Explode"}</button>
+    <div class="oc-seg" role="radiogroup" aria-label="Camera">
+      {#each [["iso", "Iso"], ["top", "Top"], ["front", "Front"], ["side", "Side"]] as const as [v, name]}
+        <button class="oc-seg-opt" role="radio" aria-checked={view === v} onclick={() => (view = v)}>{name}</button>
+      {/each}
     </div>
+    <button class="oc-seg-opt labels" role="switch" aria-checked={labels} onclick={() => (labels = !labels)}>Labels</button>
   </div>
 </div>
 
@@ -274,16 +271,16 @@
     background: var(--ground-raised); border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: var(--shadow-float); padding: 4px 8px; }
   .tags :global(.callout b) { font: 600 14px/18px var(--font-serif); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tags :global(.callout span) { font: 500 12px/16px var(--font-sans); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .card { position: absolute; right: var(--space-3); top: 64px; width: min(280px, calc(100% - 24px)); display: flex; flex-direction: column; gap: 2px;
+  .card { position: absolute; left: var(--space-3); right: var(--space-3); bottom: 72px; max-width: 360px; display: flex; flex-direction: column; gap: 2px;
     background: var(--ground-raised); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-float); padding: var(--space-3) var(--space-4); pointer-events: none; }
   .card .eyebrow { font: 600 12px/16px var(--font-sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); }
-  .card b { font: 700 20px/26px var(--font-serif); color: var(--ink); }
+  .card b { font: 700 18px/24px var(--font-serif); color: var(--ink); }
   .card span { font: 400 14px/20px var(--font-serif); color: var(--ink-muted); }
   .card .price { font: 600 16px/24px var(--font-sans); color: var(--ink); margin-top: var(--space-1); }
   .card .hint { font-size: 13px; margin-top: var(--space-1); }
-  .hint-pill { position: absolute; left: var(--space-3); bottom: 64px; pointer-events: none; }
-  .toolbar { position: absolute; left: var(--space-3); right: var(--space-3); display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; pointer-events: none; }
-  .toolbar.top { top: var(--space-3); left: 112px; } .toolbar.bottom { bottom: var(--space-3); }
+  .hint-pill { position: absolute; right: var(--space-3); top: var(--space-3); pointer-events: none; }
+  .toolbar { position: absolute; left: var(--space-3); right: var(--space-3); bottom: var(--space-3); display: flex; gap: var(--space-2); align-items: center; pointer-events: none; }
   .toolbar > * { pointer-events: auto; }
-  .toolbar input[type="range"] { flex: 1; min-width: 80px; accent-color: var(--oxblood); }
+  .labels { margin-left: auto; }
+  @media (max-width: 759px) { .labels { display: none; } .toolbar .oc-seg-opt { padding: 0 10px; } }
 </style>

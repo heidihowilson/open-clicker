@@ -1,4 +1,5 @@
-/* Open Clicker design system, component styles (MIT). Copied from docs/brand; edit there first. */
+/* Open Clicker design system, component styles (MIT). From the design-system zip (docs/brand), plus the
+ * touch sizes and oc-seg-fill / oc-choice from docs/ui-system.md. */
 /* Open Clicker — component styles. Every colour, radius and shadow is a token from tokens.css. */
 body { margin: 0; font-family: var(--font-serif); background: var(--ground); color: var(--ink); -webkit-font-smoothing: antialiased; }
 .oc-row { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; padding: var(--space-4); }
@@ -31,7 +32,7 @@ body { margin: 0; font-family: var(--font-serif); background: var(--ground); col
 /* Button — keycap-shaped. Ivory by default; the one primary per view is an oxblood cap. */
 .oc-btn {
   display: inline-flex; align-items: center; gap: var(--space-2); box-sizing: border-box;
-  height: 40px; margin-bottom: 2px; padding: 0 var(--space-4); border: 0; border-radius: var(--radius-key);
+  height: var(--btn-h, 40px); margin-bottom: 2px; padding: 0 var(--space-4); border: 0; border-radius: var(--radius-key);
   background: var(--cap-ivory); color: var(--on-cap-ivory); box-shadow: var(--shadow-cap-ivory);
   font-family: var(--font-serif); font-size: 16px; line-height: 24px; font-weight: 600;
   cursor: pointer; user-select: none;
@@ -61,12 +62,12 @@ body { margin: 0; font-family: var(--font-serif); background: var(--ground); col
 /* Segmented — a row of keys in a well; the chosen one is pressed. */
 .oc-seg { display: inline-flex; gap: var(--space-1); padding: var(--space-1) var(--space-1) 6px; /* space-1 + the 2px side */ background: var(--well); border-radius: var(--radius-sm); }
 .oc-seg-opt {
-  height: 32px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-key);
+  height: var(--seg-h, 32px); padding: 0 var(--space-3); border: 0; border-radius: var(--radius-key);
   background: var(--cap-ivory); color: var(--on-cap-ivory); box-shadow: var(--shadow-cap-ivory);
   font-family: var(--font-serif); font-size: 14px; line-height: 20px; font-weight: 600; cursor: pointer;
   transition: transform 120ms ease-out, box-shadow 120ms ease-out, background 120ms ease-out, color 120ms ease-out;
 }
-.oc-seg-opt[aria-checked="true"] { transform: translateY(2px); box-shadow: none; background: var(--accent-soft); color: var(--accent-text); transition-duration: 60ms; }
+.oc-seg-opt[aria-checked="true"], .oc-seg-opt[aria-selected="true"] { transform: translateY(2px); box-shadow: none; background: var(--accent-soft); color: var(--accent-text); transition-duration: 60ms; }
 .oc-seg-opt:disabled { color: var(--ink-muted); box-shadow: none; background: transparent; cursor: default; }
 .oc-seg-opt:focus-visible { outline: none; box-shadow: var(--shadow-cap-ivory), var(--focus-ring); }
 .oc-seg-opt[aria-checked="true"]:focus-visible { box-shadow: var(--focus-ring); }
@@ -88,4 +89,26 @@ body { margin: 0; font-family: var(--font-serif); background: var(--ground); col
 .oc-field-help { font-family: var(--font-serif); font-size: 14px; line-height: 20px; color: var(--ink-muted); }
 .oc-field-alert .oc-field-help { color: var(--alert); }
 
-@media (prefers-reduced-motion: reduce) { .oc-key, .oc-btn, .oc-seg-opt { transition: none; } }
+/* Fill: the options share the row's width. */
+.oc-seg-fill { display: flex; }
+.oc-seg-fill .oc-seg-opt { flex: 1; min-width: 0; padding: 0 var(--space-1); line-height: 16px; }
+
+/* Choice — a big keycap that carries a title, a spec line and a sentence. Pressed when chosen. */
+.oc-choice {
+  display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; padding: var(--space-2) var(--space-3); margin-bottom: 2px;
+  border: 0; border-radius: var(--radius-key); background: var(--cap-ivory); color: var(--on-cap-ivory); box-shadow: var(--shadow-cap-ivory);
+  font: 400 14px/20px var(--font-serif); cursor: pointer; transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+}
+.oc-choice b { font: 700 17px/22px var(--font-serif); }
+.oc-choice .oc-choice-spec { font: 600 12px/16px var(--font-sans); letter-spacing: 0.04em; opacity: 0.75; }
+.oc-choice[aria-pressed="true"] { transform: translateY(2px); box-shadow: inset 0 0 0 2px var(--selection); }
+.oc-choice:focus-visible { outline: none; box-shadow: var(--shadow-cap-ivory), var(--focus-ring); }
+
+/* Touch sizes: below the wide layout every target is at least 44 px. */
+@media (max-width: 1099px) {
+  :root { --seg-h: 44px; --btn-h: 44px; }
+  .oc-field { min-width: 0; }
+  .oc-field-well { height: 44px; font-size: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) { .oc-key, .oc-btn, .oc-seg-opt, .oc-choice { transition: none; } }

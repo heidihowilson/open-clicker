@@ -1,6 +1,7 @@
 import { mount } from "svelte";
 import "./ds/tokens.css";
 import "./ds/components.css";
+import "./ui/pane.css";
 import App from "./App.svelte";
 
 const target = document.getElementById("app");

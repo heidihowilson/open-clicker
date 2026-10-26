@@ -52,6 +52,8 @@ Seed designs are design files in this repository. A contribution is a design fil
 
 2026-10-26: restyled to the Open Clicker design system (`docs/brand/`): the tool shell layout, Tile, Slab, Deck and Column templates on the Choc grid, cap colours by action, Kit, Half-built and Fully assembled pricing, and both themes. The 3D explode and tap-to-focus stay.
 
+2026-10-26: the UI system in [`ui-system.md`](ui-system.md) is in. One editor with Keys, Parts and Build tabs: a bottom sheet on phones, a side panel from 760 px, plus the tool rail from 1 100 px. Drag moves keys, pinch zooms, and every touch target is 44 px. Design files are schema 3: an id, a revision and a fixed `circuit` block. The new netlist export is the schematic as data: designators, footprints and named nets, all derived from the design file. `designer/e2e/responsive.py` checks four screen sizes.
+
 ## First slice
 
 1. The design-file schema and the three XIAO chip profiles.

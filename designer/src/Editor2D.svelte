@@ -1,18 +1,23 @@
 <script lang="ts">
   import { capColour, glyphUrl, legendOf } from "./lib/actions";
-  import { capWidth, KEYCAPS, PITCH, type Design } from "./lib/design";
+  import { capWidth, KEYCAPS, PITCH, readingOrder, type Design } from "./lib/design";
   import { boardBounds, collisions, keyField, SHELL_RULES } from "./lib/geometry";
 
-  export type Tool = "select" | "move" | "add" | "measure";
-  let { design = $bindable(), selected = $bindable(), tool, alertKeys }: { design: Design; selected: string | null; tool: Tool; alertKeys: Set<string> } = $props();
+  export type Tool = "select" | "add" | "measure";
+  let { design = $bindable(), selected = $bindable(), tool = $bindable(), alertKeys, onPick }: {
+    design: Design; selected: string | null; tool: Tool; alertKeys: Set<string>; onPick: (id: string) => void;
+  } = $props();
 
   const PX_PER_MM = 4;
   const PAD = 12;
+  /* A press that moves less than this is a tap. */
+  const SLOP_PX = 8;
   let host: HTMLDivElement;
   let svg: SVGSVGElement;
   let availW = $state(0), availH = $state(0);
-  let drag: { id: string; dx: number; dy: number } | null = null;
+  let userZoom = $state(1);
   let hover = $state<string | null>(null);
+  let dragging = $state<string | null>(null);
   let measure = $state<{ a: { x: number; y: number }; b: { x: number; y: number } | null } | null>(null);
 
   const bounds = $derived(boardBounds(design));
@@ -20,7 +25,8 @@
   const grow = SHELL_RULES.wall;
   const outer = $derived({ x: bounds.minX - grow, y: bounds.minY - grow, w: bounds.maxX - bounds.minX + 2 * grow, h: bounds.maxY - bounds.minY + 2 * grow });
   const view = $derived({ x: outer.x - PAD, y: outer.y - PAD, w: outer.w + 2 * PAD, h: outer.h + 2 * PAD });
-  const zoom = $derived(availW && availH ? Math.min(1, (availW - 16) / (view.w * PX_PER_MM), (availH - 48) / (view.h * PX_PER_MM)) : 1);
+  const fit = $derived(availW && availH ? Math.min(1, (availW - 16) / (view.w * PX_PER_MM), (availH - 16) / (view.h * PX_PER_MM)) : 1);
+  const zoom = $derived(fit * userZoom);
   const clashing = $derived(new Set(collisions(design).flat()));
   const depth = $derived(KEYCAPS[design.keycap].depthMm);
   const ir = $derived(design.options.irTransmit || design.options.irReceive);
@@ -36,53 +42,95 @@
   const snapX = (v: number) => Math.round(v / (PITCH.x / 2)) * (PITCH.x / 2);
   const snapY = (v: number) => Math.round(v / PITCH.y) * PITCH.y;
 
-  function keyDown(event: PointerEvent, id: string) {
+  /* Pointer gestures. On a key: tap selects, drag moves (snapped). On the empty sheet: tap
+   * deselects, adds a key or places a measure point; one finger pans; two fingers pinch. */
+  type Press = { id: number; x: number; y: number; lastX: number; lastY: number; moved: boolean; key: string | null; dx: number; dy: number };
+  const presses = new Map<number, Press>();
+  let pinch: { dist: number; zoom: number } | null = null;
+
+  function down(event: PointerEvent, key: string | null) {
     event.stopPropagation();
-    if (tool === "measure") return;
-    selected = id;
-    if (tool !== "move") return;
-    const k = design.keys.find((k) => k.id === id);
-    if (!k) return;
-    const at = toDesign(event);
-    drag = { id, dx: k.x - at.x, dy: k.y - at.y };
-    (event.currentTarget as Element).setPointerCapture(event.pointerId);
+    let dx = 0, dy = 0;
+    const k = key ? design.keys.find((k) => k.id === key) : null;
+    if (k && tool === "select") { const at = toDesign(event); dx = k.x - at.x; dy = k.y - at.y; }
+    presses.set(event.pointerId, { id: event.pointerId, x: event.clientX, y: event.clientY, lastX: event.clientX, lastY: event.clientY, moved: false, key: tool === "select" ? key : null, dx, dy });
+    svg.setPointerCapture(event.pointerId);
+    if (presses.size === 2) {
+      const [a, b] = [...presses.values()];
+      pinch = { dist: Math.hypot(a!.x - b!.x, a!.y - b!.y), zoom: userZoom };
+      dragging = null;
+    }
   }
   function move(event: PointerEvent) {
-    if (!drag) return;
-    const at = toDesign(event);
-    const k = design.keys.find((k) => k.id === drag!.id);
-    if (k) { k.x = snapX(at.x + drag.dx); k.y = snapY(at.y + drag.dy); }
+    const p = presses.get(event.pointerId);
+    if (!p) return;
+    if (!p.moved && Math.hypot(event.clientX - p.x, event.clientY - p.y) > SLOP_PX) p.moved = true;
+    if (pinch && presses.size === 2) {
+      p.lastX = event.clientX; p.lastY = event.clientY;
+      const [a, b] = [...presses.values()];
+      userZoom = Math.min(2, Math.max(0.5, pinch.zoom * Math.hypot(a!.lastX - b!.lastX, a!.lastY - b!.lastY) / Math.max(pinch.dist, 1)));
+      return;
+    }
+    if (!p.moved) return;
+    if (p.key) {
+      dragging = p.key;
+      const at = toDesign(event);
+      const k = design.keys.find((k) => k.id === p.key);
+      if (k) { k.x = snapX(at.x + p.dx); k.y = snapY(at.y + p.dy); }
+    } else {
+      host.scrollLeft -= event.clientX - p.lastX;
+      host.scrollTop -= event.clientY - p.lastY;
+    }
+    p.lastX = event.clientX; p.lastY = event.clientY;
   }
-  function sheetDown(event: PointerEvent) {
+  function up(event: PointerEvent) {
+    const p = presses.get(event.pointerId);
+    presses.delete(event.pointerId);
+    if (presses.size < 2) pinch = null;
+    if (!p) return;
+    dragging = null;
+    if (p.moved || presses.size) return;
+    if (p.key) { onPick(p.key); return; }
+    tap(event);
+  }
+  function tap(event: PointerEvent) {
     const at = toDesign(event);
     if (tool === "measure") {
-      const p = { x: Math.round(at.x * 2) / 2, y: Math.round(at.y * 2) / 2 };
-      measure = !measure || measure.b ? { a: p, b: null } : { a: measure.a, b: p };
+      const pt = { x: Math.round(at.x * 2) / 2, y: Math.round(at.y * 2) / 2 };
+      measure = !measure || measure.b ? { a: pt, b: null } : { a: measure.a, b: pt };
       return;
     }
     if (tool === "add") {
       let n = design.keys.length + 1;
       while (design.keys.some((k) => k.id === `key-${n}`)) n++;
-      design.keys.push({ id: `key-${n}`, x: snapX(at.x), y: snapY(at.y), w: 1, action: "none", label: "" });
-      selected = `key-${n}`;
+      const x = snapX(at.x), y = snapY(at.y);
+      if (design.keys.some((k) => k.x === x && k.y === y)) return;
+      design.keys.push({ id: `key-${n}`, x, y, w: 1, action: "none", label: "" });
+      tool = "select";
+      onPick(`key-${n}`);
       return;
     }
     selected = null;
   }
-  /* Keyboard: arrows nudge one cell, Shift half a cell; Tab cycles keys in reading order. */
+  function wheel(event: WheelEvent) {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    userZoom = Math.min(2, Math.max(0.5, userZoom * (event.deltaY < 0 ? 1.1 : 1 / 1.1)));
+  }
+  /* Keyboard: arrows nudge one cell, Shift half a cell sideways; Tab cycles keys in reading order. */
   function keydown(event: KeyboardEvent) {
-    const order = [...design.keys].sort((a, b) => a.y - b.y || a.x - b.x);
+    const order = readingOrder(design.keys);
     if (event.key === "Tab") {
       const i = order.findIndex((k) => k.id === selected);
       const next = order[(i + (event.shiftKey ? order.length - 1 : 1)) % order.length];
-      if (next) { selected = next.id; event.preventDefault(); }
+      if (next) { onPick(next.id); event.preventDefault(); }
       return;
     }
     const k = design.keys.find((k) => k.id === selected);
     if (!k) return;
-    const fx = event.shiftKey ? PITCH.x / 2 : PITCH.x, fy = event.shiftKey ? PITCH.y / 2 : PITCH.y;
+    const fx = event.shiftKey ? PITCH.x / 2 : PITCH.x;
     const moves: Record<string, () => void> = {
-      ArrowLeft: () => (k.x -= fx), ArrowRight: () => (k.x += fx), ArrowUp: () => (k.y -= fy), ArrowDown: () => (k.y += fy),
+      ArrowLeft: () => (k.x -= fx), ArrowRight: () => (k.x += fx), ArrowUp: () => (k.y -= PITCH.y), ArrowDown: () => (k.y += PITCH.y),
       Delete: () => remove(k.id), Backspace: () => remove(k.id), Escape: () => (selected = null),
     };
     const act = moves[event.key];
@@ -97,13 +145,14 @@
 </script>
 
 <!-- The sheet is a keyboard target (arrows nudge, Tab cycles keys), as the brand book asks. -->
+<div class="wrap">
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 <div class="sheet" bind:this={host} bind:clientWidth={availW} bind:clientHeight={availH} tabindex="0" role="application"
-  aria-label="Layout, top view at 4 pixels per millimetre" onkeydown={keydown} data-tool={tool}>
+  aria-label="Layout, top view at 4 pixels per millimetre" onkeydown={keydown} onwheel={wheel} data-tool={tool}>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <svg bind:this={svg} viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
     width={view.w * PX_PER_MM * zoom} height={view.h * PX_PER_MM * zoom}
-    onpointerdown={sheetDown} onpointermove={move} onpointerup={() => (drag = null)}>
+    onpointerdown={(e) => down(e, null)} onpointermove={move} onpointerup={up} onpointercancel={up}>
     <defs>
       <pattern id="mm" width="1" height="1" patternUnits="userSpaceOnUse" x={gridOrigin.x} y={gridOrigin.y}><path d="M1 0H0V1" class="minor" /></pattern>
       <pattern id="cell" width={PITCH.x} height={PITCH.y} patternUnits="userSpaceOnUse" x={gridOrigin.x} y={gridOrigin.y}>
@@ -124,8 +173,8 @@
       {@const legend = legendOf(k.action, k.label)}
       {@const cw = capWidth(k.w)}
       <g transform={`translate(${k.x} ${k.y})`} class={`key ${colour}`} class:selected={k.id === selected} class:hover={k.id === hover && k.id !== selected}
-        class:alert={clashing.has(k.id) || alertKeys.has(k.id)}
-        onpointerdown={(e) => keyDown(e, k.id)} onpointerenter={() => (hover = k.id)} onpointerleave={() => (hover = null)}
+        class:alert={clashing.has(k.id) || alertKeys.has(k.id)} class:dragging={k.id === dragging}
+        onpointerdown={(e) => down(e, k.id)} onpointerenter={() => (hover = k.id)} onpointerleave={() => (hover = null)}
         role="button" tabindex="-1" aria-label={`${k.id} key`}>
         <rect x={-cw / 2} y={-depth / 2 + 0.5} width={cw} height={depth} rx="2" class="side" />
         <rect x={-cw / 2} y={-depth / 2} width={cw} height={depth} rx="2" class="cap" />
@@ -148,14 +197,16 @@
       {/if}
     {/if}
   </svg>
-  <span class="scale">2D · 4 px/mm · {Math.round(zoom * 100)}%</span>
+</div>
+  <button class="scale" onclick={() => (userZoom = 1)} title="Fit">{Math.round(zoom * 100)}% · 4 px/mm</button>
 </div>
 
 <style>
-  .sheet { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: auto; background: var(--viewport); outline: none; }
+  .sheet { position: relative; width: 100%; height: 100%; display: flex; overflow: auto; background: var(--viewport); outline: none; }
   .sheet:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
   .sheet[data-tool="add"] svg, .sheet[data-tool="measure"] svg { cursor: crosshair; }
-  svg { display: block; touch-action: none; user-select: none; flex: none; }
+  svg { display: block; touch-action: none; user-select: none; -webkit-user-select: none; flex: none; margin: auto; }
+  .wrap { position: relative; width: 100%; height: 100%; }
   .minor { fill: none; stroke: var(--grid-minor); stroke-width: 0.12; }
   .major { fill: none; stroke: var(--grid-major); stroke-width: 0.25; }
   .rim { fill: var(--tray-deep); }
@@ -163,7 +214,7 @@
   .port { fill: #2a1419; }
   .wordmark { font-family: var(--font-serif); font-weight: 900; font-size: 7px; fill: var(--on-butter); font-variation-settings: "SOFT" 100, "WONK" 1; }
   .key { cursor: pointer; outline: none; }
-  .sheet[data-tool="move"] .key { cursor: grab; }
+  .key.dragging { cursor: grabbing; opacity: 0.85; }
   .key .side { fill: var(--cap-ivory-side); }
   .key .cap { fill: var(--cap-ivory); }
   .key .dish { fill: #000; opacity: 0.035; }
@@ -179,5 +230,5 @@
   .measure { stroke: var(--accent-text); stroke-width: 0.35; stroke-dasharray: 1 0.6; }
   .measure-pt { fill: var(--accent-text); }
   .measure-label { font-family: var(--font-sans); font-size: 3.6px; font-weight: 600; fill: var(--accent-text); text-anchor: middle; paint-order: stroke; stroke: var(--viewport); stroke-width: 1px; }
-  .scale { position: absolute; right: var(--space-3); bottom: var(--space-3); font: 500 13px/20px var(--font-sans); color: var(--ink-muted); background: var(--ground-raised); padding: 0 var(--space-2); border-radius: var(--radius-xs); }
+  .scale { position: absolute; left: var(--space-3); bottom: var(--space-3); border: 0; font: 500 13px/44px var(--font-sans); color: var(--ink-muted); background: var(--ground-raised); padding: 0 var(--space-2); border-radius: var(--radius-xs); cursor: pointer; }
 </style>

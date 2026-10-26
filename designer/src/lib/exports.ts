@@ -1,6 +1,7 @@
 import { CHIPS } from "./chips";
 import type { Design } from "./design";
 import { planPins } from "./matrix";
+import { designators } from "./netlist";
 
 export interface Keymap {
   design: string;
@@ -59,4 +60,19 @@ static const char *const or_keymap[OR_MATRIX_ROWS][OR_MATRIX_COLS] = {
 ${rows}
 };
 `;
+}
+
+/* The layout file. `derived` carries the pin plan and designators for readers that do not run
+ * the planner; it is output only, and loading the file drops it. */
+export function layoutFile(design: Design): string {
+  const plan = planPins(design);
+  const derived = plan.ok ? {
+    rows: plan.rows.map((p) => p.id),
+    columns: plan.columns.map((p) => p.id),
+    irTransmit: plan.irTransmit?.id ?? null,
+    irReceive: plan.irReceive?.id ?? null,
+    battery: plan.battery?.id ?? null,
+    keys: Object.fromEntries([...designators(design, plan).keys].map(([id, r]) => [id, r])),
+  } : null;
+  return JSON.stringify({ ...design, derived }, null, 2);
 }

@@ -6,7 +6,8 @@ import tileJson from "../src/seeds/tile.json";
 import { capColour } from "../src/lib/actions";
 import { bom, bomTotal } from "../src/lib/bom";
 import { check, errorsIn } from "../src/lib/checks";
-import { parseDesign, type Design } from "../src/lib/design";
+import { parseDesign, readingOrder, type Design } from "../src/lib/design";
+import { keyCapacity, netlist } from "../src/lib/netlist";
 import { keymap, keymapHeader } from "../src/lib/exports";
 import { boardBounds, collisions, keyField } from "../src/lib/geometry";
 import { planPins } from "../src/lib/matrix";
@@ -96,4 +97,45 @@ test("fulfilment levels rise from Kit to Half-built to Fully assembled", () => {
   expect(half!.lines.some((l) => l.label.includes("filament"))).toBe(false);
   expect(full!.lines.some((l) => l.label.includes("filament"))).toBe(true);
   expect(tiers(column, { ...DEFAULT_PRICING, batch: 500 })[1]!.costUsd).toBeLessThan(half!.costUsd);
+});
+
+test("schema 2 files upgrade on load", () => {
+  const { schema: _s, id: _i, revision: _r, circuit: _c, ...rest } = tile;
+  const old = parseDesign({ ...rest, schema: 2, template: "Tile" });
+  expect(old.schema).toBe(3);
+  expect(old.template).toBe("tile");
+  expect(old.circuit.matrix).toBe("col2row");
+});
+
+test("two keys on one centre are rejected", () => {
+  const k = tile.keys[0]!;
+  expect(() => parseDesign({ ...tile, keys: [...tile.keys, { ...k, id: "twin" }] })).toThrow();
+});
+
+test("the netlist is deterministic and wires every key column to row through its diode", () => {
+  const a = netlist(tile), b = netlist(structuredClone(tile));
+  expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  const switches = a.parts.filter((p) => p.ref.startsWith("SW"));
+  const diodes = a.parts.filter((p) => p.ref.startsWith("D") && p.ref !== "D");
+  expect(switches.length).toBe(tile.keys.length);
+  expect(diodes.length).toBe(tile.keys.length);
+  for (const sw of switches) {
+    const d = diodes.find((x) => x.keyId === sw.keyId)!;
+    expect(sw.pins["2"]).toBe(d.pins.A!);
+    expect(sw.pins["1"]).toMatch(/^COL\d+$/);
+    expect(d.pins.K).toMatch(/^ROW\d+$/);
+  }
+  expect(a.parts.find((p) => p.ref === "SW1")!.keyId).toBe(readingOrder(tile.keys)[0]!.id);
+});
+
+test("IR and battery sensing add their parts and nets", () => {
+  const n = netlist({ ...tile, options: { irTransmit: true, irReceive: true, batterySense: true } });
+  for (const ref of ["LED1", "Q1", "R1", "R2", "U2", "C1", "R3", "R4"]) expect(n.parts.some((p) => p.ref === ref)).toBe(true);
+  for (const net of ["IR_TX", "IR_RX", "VBAT_SENSE"]) expect(n.nets).toContain(net);
+});
+
+test("key capacity matches the planner", () => {
+  const cap = keyCapacity(tile);
+  expect(cap).toBeGreaterThanOrEqual(tile.keys.length);
+  expect(planPins({ ...tile, keys: Array.from({ length: cap + 1 }, (_, i) => ({ id: `k${i}`, x: i * 18, y: 0, w: 1 as const, action: "none" as const, label: "" })) }).ok).toBe(false);
 });
