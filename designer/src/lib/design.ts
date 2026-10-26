@@ -1,30 +1,27 @@
 import { z } from "zod";
+import { ACTIONS } from "./actions";
 import { CHIP_IDS } from "./chips";
 
-/* Actions match the firmware command names, so a design's keymap is valid firmware input. */
-export const ACTIONS = [
-  "up", "down", "left", "right", "ok", "back", "home", "play",
-  "escape", "space", "volume_up", "volume_down", "mute", "ir_power", "none",
-] as const;
-export type Action = (typeof ACTIONS)[number];
-
-export const SHELLS = ["EXO", "FOLD", "LOOP", "FIN", "OFFSET", "KEEL"] as const;
+export { ACTIONS, type Action } from "./actions";
 
 /* Positions are millimetres from the design origin, top view: x to the right, y toward the
- * bottom of the remote. Rotation is in degrees, clockwise. */
+ * bottom of the remote. Keys sit on the Choc grid (18 × 17 mm); x may land on half a pitch so
+ * 1.5u and 2u keys can centre between columns. Keys are never rotated. */
 export const KeySchema = z.object({
   id: z.string().regex(/^[a-z0-9-]+$/),
   x: z.number().min(-200).max(200),
   y: z.number().min(-200).max(200),
-  r: z.number().min(-180).max(180),
+  w: z.union([z.literal(1), z.literal(1.5), z.literal(2)]),
   action: z.enum(ACTIONS),
-  label: z.string().max(12),
+  /** Optional text legend that replaces the action's own, four characters at most. */
+  label: z.string().max(4),
 });
 export type Key = z.infer<typeof KeySchema>;
 
 export const DesignSchema = z.object({
-  schema: z.literal(1),
+  schema: z.literal(2),
   name: z.string().min(1).max(60),
+  template: z.string().max(20),
   chip: z.enum(CHIP_IDS),
   keycap: z.enum(["choc-mbk", "choc-mcc"]),
   options: z.object({
@@ -38,10 +35,6 @@ export const DesignSchema = z.object({
     widthMm: z.number().min(5).max(60),
     thicknessMm: z.number().min(2).max(15),
   }),
-  shell: z.object({
-    family: z.enum(SHELLS),
-    marginMm: z.number().min(2).max(20),
-  }),
   keys: z.array(KeySchema).min(1).max(40),
 });
 export type Design = z.infer<typeof DesignSchema>;
@@ -50,9 +43,11 @@ export function parseDesign(input: unknown): Design {
   return DesignSchema.parse(input);
 }
 
-/* Keycap footprints. MBK is the published Choc keycap size; MCC is treated the same until a
- * sample is measured. */
+/* Choc grid and keycap sizes. MBK caps are 17.5 × 16.5 mm at 1u, 26.5 at 1.5u and 35.5 at 2u
+ * (SplitKB listings): one pitch less 0.5 mm. MCC is treated the same until a sample is measured. */
+export const PITCH = { x: 18, y: 17 } as const;
 export const KEYCAPS = {
-  "choc-mbk": { widthMm: 17.5, depthMm: 16.5, heightMm: 3, verified: true },
-  "choc-mcc": { widthMm: 17.5, depthMm: 16.5, heightMm: 3, verified: false },
+  "choc-mbk": { depthMm: 16.5, heightMm: 3, verified: true },
+  "choc-mcc": { depthMm: 16.5, heightMm: 3, verified: false },
 } as const;
+export const capWidth = (w: Key["w"]) => PITCH.x * w - 0.5;

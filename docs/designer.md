@@ -50,6 +50,8 @@ Seed designs are design files in this repository. A contribution is a design fil
 
 2026-10-24: published at <https://openremote.sethgholson.com> on the homelab celld fleet `openremote`; a push to the homelab remote deploys it. It now adds precise part models, an explode view down to purchasable parts, tap-to-focus, and three pricing tiers.
 
+2026-10-26: restyled to the Open Clicker design system (`docs/brand/`): the tool shell layout, Tile, Slab, Deck and Column templates on the Choc grid, cap colours by action, Kit, Half-built and Fully assembled pricing, and both themes. The 3D explode and tap-to-focus stay.
+
 ## First slice
 
 1. The design-file schema and the three XIAO chip profiles.

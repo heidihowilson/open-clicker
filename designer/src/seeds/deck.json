@@ -1,0 +1,156 @@
+{
+  "schema": 2,
+  "name": "Coffee table Deck",
+  "template": "Deck",
+  "chip": "xiao-esp32c3",
+  "keycap": "choc-mbk",
+  "options": {
+    "irTransmit": true,
+    "irReceive": false,
+    "batterySense": true
+  },
+  "battery": {
+    "capacityMah": 400,
+    "lengthMm": 30,
+    "widthMm": 20,
+    "thicknessMm": 6
+  },
+  "keys": [
+    {
+      "id": "power",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "action": "power",
+      "label": ""
+    },
+    {
+      "id": "input",
+      "x": 18,
+      "y": 0,
+      "w": 1,
+      "action": "input",
+      "label": ""
+    },
+    {
+      "id": "mute",
+      "x": 36,
+      "y": 0,
+      "w": 1,
+      "action": "mute",
+      "label": ""
+    },
+    {
+      "id": "back",
+      "x": 54,
+      "y": 0,
+      "w": 1,
+      "action": "back",
+      "label": ""
+    },
+    {
+      "id": "up",
+      "x": 72,
+      "y": 0,
+      "w": 1,
+      "action": "up",
+      "label": ""
+    },
+    {
+      "id": "home",
+      "x": 90,
+      "y": 0,
+      "w": 1,
+      "action": "home",
+      "label": ""
+    },
+    {
+      "id": "vol-up",
+      "x": 0,
+      "y": 17,
+      "w": 1,
+      "action": "volume_up",
+      "label": ""
+    },
+    {
+      "id": "ch-up",
+      "x": 18,
+      "y": 17,
+      "w": 1,
+      "action": "channel_up",
+      "label": ""
+    },
+    {
+      "id": "menu",
+      "x": 36,
+      "y": 17,
+      "w": 1,
+      "action": "menu",
+      "label": ""
+    },
+    {
+      "id": "left",
+      "x": 54,
+      "y": 17,
+      "w": 1,
+      "action": "left",
+      "label": ""
+    },
+    {
+      "id": "ok",
+      "x": 72,
+      "y": 17,
+      "w": 1,
+      "action": "ok",
+      "label": ""
+    },
+    {
+      "id": "right",
+      "x": 90,
+      "y": 17,
+      "w": 1,
+      "action": "right",
+      "label": ""
+    },
+    {
+      "id": "vol-down",
+      "x": 0,
+      "y": 34,
+      "w": 1,
+      "action": "volume_down",
+      "label": ""
+    },
+    {
+      "id": "ch-down",
+      "x": 18,
+      "y": 34,
+      "w": 1,
+      "action": "channel_down",
+      "label": ""
+    },
+    {
+      "id": "play",
+      "x": 45.0,
+      "y": 34,
+      "w": 2,
+      "action": "play",
+      "label": ""
+    },
+    {
+      "id": "down",
+      "x": 72,
+      "y": 34,
+      "w": 1,
+      "action": "down",
+      "label": ""
+    },
+    {
+      "id": "guide",
+      "x": 90,
+      "y": 34,
+      "w": 1,
+      "action": "guide",
+      "label": ""
+    }
+  ]
+}

@@ -5,16 +5,15 @@
   import type { Design } from "./lib/design";
   import { boardBounds } from "./lib/geometry";
   import { buildAssembly, type PartInfo } from "./lib/parts";
-  import { addEdges, applyStyle, BLUEPRINT, type ViewStyle } from "./lib/style";
+  import { addEdges, applyStyle } from "./lib/style";
   import { bom, usd, type BomId, type BomLine } from "./lib/bom";
 
-  let { design }: { design: Design } = $props();
+  let { design, theme }: { design: Design; theme: string } = $props();
   let host: HTMLDivElement;
   let overlay: SVGSVGElement;
   let tags: HTMLDivElement;
   let explode = $state(0);
   let target = $state(0);
-  let style = $state<ViewStyle>("solid");
   let focusCard = $state<{ line: BomLine; keyId: string | null } | null>(null);
   let labels = $state(true);
   let view = $state<"iso" | "top" | "front" | "side">("iso");
@@ -38,12 +37,19 @@
     controls.enableDamping = true;
     controls.screenSpacePanning = true;
 
+    /* Viewport grid: grid-minor every millimetre, grid-major every 18 mm Choc pitch. */
     const grids = new THREE.Group();
-    const minor = new THREE.GridHelper(400, 80, BLUEPRINT.faint, BLUEPRINT.faint);
-    const major = new THREE.GridHelper(400, 8, BLUEPRINT.line, BLUEPRINT.line);
-    for (const g of [minor, major]) { (g.material as THREE.Material).transparent = true; (g.material as THREE.Material).opacity = g === minor ? 0.35 : 0.5; }
-    grids.add(minor, major);
     scene.add(grids);
+    let ghost = "#9c8673";
+    function paint() {
+      const css = getComputedStyle(host);
+      const v = (name: string) => css.getPropertyValue(name).trim() || "#888";
+      scene.background = new THREE.Color(v("--viewport"));
+      ghost = v("--line-strong");
+      grids.clear();
+      grids.add(new THREE.GridHelper(360, 360, v("--grid-minor"), v("--grid-minor")), new THREE.GridHelper(360, 20, v("--grid-major"), v("--grid-major")));
+      if (model) applyStyle(model, ghost, focused);
+    }
 
     let model: THREE.Group | null = null;
     let leaders: THREE.Group | null = null;
@@ -73,7 +79,7 @@
       const r = Math.max(bounds.getSize(new THREE.Vector3()).length() / 2, 4);
       const offset = camera.position.clone().sub(controls.target);
       fly({ position: c.clone().add(offset), target: c, zoom: Math.min(14, Math.max(1, camera.top / (r * 2.4))) });
-      if (model) applyStyle(model, untrack(() => style), focused);
+      if (model) applyStyle(model, ghost, focused);
       const id = object.userData.item as BomId;
       const line = bom($state.snapshot(design) as Design).find((l) => l.id === id);
       focusCard = line ? { line, keyId: (object.userData.keyId as string | undefined) ?? null } : null;
@@ -84,7 +90,7 @@
       if (restore && saved) fly(saved);
       saved = null;
       focusCard = null;
-      if (model) applyStyle(model, untrack(() => style), null);
+      if (model) applyStyle(model, ghost, null);
     }
     let down: { x: number; y: number; t: number } | null = null;
     const canvas = renderer.domElement;
@@ -147,7 +153,7 @@
     const box = new THREE.Box3(), point = new THREE.Vector3();
     function placeCallouts(show: boolean) {
       tags.style.display = overlay.style.display = show ? "" : "none";
-      const w = host.clientWidth, h = host.clientHeight, column = Math.min(190, w * 0.42);
+      const w = host.clientWidth, h = host.clientHeight, column = Math.min(220, w * 0.44);
       /* Slide the drawing left so the label column never covers a part. */
       const shift = show ? Math.round(column / 2 + 6) : 0;
       if (shift !== shifted) {
@@ -160,11 +166,11 @@
         point.set(box.max.x, (box.min.y + box.max.y) / 2, (box.min.z + box.max.z) / 2).project(camera);
         return { c, x: (point.x + 1) / 2 * w, y: (1 - point.y) / 2 * h };
       }).sort((a, b) => a.y - b.y);
-      const top = 64, bottom = h - 76, step = items.length > 1 ? Math.max(34, (bottom - top) / (items.length - 1)) : 0;
+      const top = 64, bottom = h - 76, step = items.length > 1 ? Math.max(46, (bottom - top) / (items.length - 1)) : 0;
       const left = w - column - 10;
       items.forEach((it, i) => {
         const y = Math.min(top + i * step, bottom);
-        it.c.el.style.transform = `translate(${left}px, ${y - 14}px)`;
+        it.c.el.style.transform = `translate(${left}px, ${y - 20}px)`;
         it.c.el.style.width = `${column}px`;
         it.c.line.setAttribute("x1", String(it.x)); it.c.line.setAttribute("y1", String(it.y));
         it.c.line.setAttribute("x2", String(left)); it.c.line.setAttribute("y2", String(y));
@@ -185,7 +191,7 @@
         if (model) { scene.remove(model); model.traverse((o) => { if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) o.geometry.dispose(); }); }
         model = buildAssembly(d);
         addEdges(model);
-        applyStyle(model, style);
+        applyStyle(model, ghost);
         scene.add(model);
         const b = boardBounds(d);
         center = new THREE.Vector3((b.minX + b.maxX) / 2, 0, (b.minY + b.maxY) / 2);
@@ -196,7 +202,7 @@
         layout(untrack(() => explode));
         makeCallouts();
       });
-      $effect(() => { const s = style; if (model) applyStyle(model, s, focused); scene.background = new THREE.Color(s === "blueprint" ? BLUEPRINT.paper : "#d9dde2"); grids.visible = s === "blueprint"; });
+      $effect(() => { void theme; requestAnimationFrame(paint); });
       $effect(() => { const v = view; unfocus(false); frame(v); });
       $effect(() => { layout(explode); if (explode < 0.5) unfocus(); });
     });
@@ -229,55 +235,55 @@
   <svg class="leaders" bind:this={overlay} aria-hidden="true"></svg>
   <div class="tags" bind:this={tags}></div>
   <div class="toolbar top">
-    {#each ["iso", "top", "front", "side"] as const as v}
-      <button class:on={view === v} onclick={() => (view = v)}>{v.toUpperCase()}</button>
-    {/each}
+    <div class="oc-seg" role="radiogroup" aria-label="Camera">
+      {#each [["iso", "Iso"], ["top", "Top"], ["front", "Front"], ["side", "Side"]] as const as [v, name]}
+        <button class="oc-seg-opt" role="radio" aria-checked={view === v} onclick={() => (view = v)}>{name}</button>
+      {/each}
+    </div>
   </div>
   {#if focusCard}
     <div class="card" role="status">
-      <small>{focusCard.line.kind === "buy" ? "PURCHASED PART" : focusCard.line.kind === "print" ? "PRINTED PART" : "FABRICATED PART"}</small>
-      <b>{focusCard.line.label}{focusCard.keyId ? ` · key ${focusCard.keyId}` : ""}</b>
+      <span class="eyebrow">{focusCard.line.kind === "buy" ? "Bought" : focusCard.line.kind === "print" ? "Printed" : "Made to order"}</span>
+      <b>{focusCard.line.label}{focusCard.keyId ? ` · the ${focusCard.keyId} key` : ""}</b>
       <span>{focusCard.line.spec}</span>
       <span class="price">{focusCard.line.qty} × {usd(focusCard.line.unitUsd)} = {usd(focusCard.line.qty * focusCard.line.unitUsd)}</span>
       <span class="basis">{focusCard.line.basis}</span>
-      <span class="hint">Tap anywhere to return</span>
+      <span class="hint">Tap anywhere to go back.</span>
     </div>
   {:else if explode > 0.5}
-    <div class="hint-pill">Tap a part to focus it</div>
+    <span class="oc-badge oc-badge-accent hint-pill">Tap a part to see it</span>
   {/if}
   <div class="toolbar bottom">
-    <button class="primary" class:on={target === 1} onclick={() => setExplode(target === 0)}>{target === 1 ? "COLLAPSE" : "EXPLODE"}</button>
-    <input type="range" min="0" max="1" step="0.01" value={target} oninput={(e) => (target = Number(e.currentTarget.value))} aria-label="Explode distance" />
-    <button class:on={labels} onclick={() => (labels = !labels)}>LABELS</button>
-    <button onclick={() => (style = style === "blueprint" ? "solid" : "blueprint")}>{style === "blueprint" ? "SOLID" : "BLUEPRINT"}</button>
+    <button class="oc-btn" class:oc-btn-primary={target === 0} onclick={() => setExplode(target === 0)}>{target === 1 ? "Put it back together" : "Explode"}</button>
+    <input type="range" min="0" max="1" step="0.01" value={target} oninput={(e) => (target = Number(e.currentTarget.value))} aria-label="How far apart" />
+    <div class="oc-seg" role="radiogroup" aria-label="Part labels">
+      <button class="oc-seg-opt" role="radio" aria-checked={labels} onclick={() => (labels = true)}>Labels</button>
+      <button class="oc-seg-opt" role="radio" aria-checked={!labels} onclick={() => (labels = false)}>Off</button>
+    </div>
   </div>
 </div>
 
 <style>
-  .viewport { position: relative; width: 100%; height: 100%; min-height: 360px; border: 1px solid var(--rule); }
+  .viewport { position: relative; width: 100%; height: 100%; min-height: 320px; background: var(--viewport); }
   .canvas { position: absolute; inset: 0; overflow: hidden; }
   .canvas :global(canvas) { display: block; touch-action: none; }
   .leaders, .tags { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
   .leaders { width: 100%; height: 100%; }
-  .leaders :global(line) { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 3; }
-  .tags :global(.callout) { position: absolute; left: 0; top: 0; font: 10px/1.3 var(--mono); color: var(--ink);
-    background: color-mix(in srgb, var(--paper) 88%, transparent); border: 1px solid var(--accent); padding: 3px 6px;
-    display: flex; flex-direction: column; overflow: hidden; }
-  .tags :global(.callout b) { letter-spacing: 1px; text-transform: uppercase; color: var(--accent); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tags :global(.callout span) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .card { position: absolute; right: 10px; top: 52px; width: min(260px, calc(100% - 20px)); display: flex; flex-direction: column; gap: 3px;
-    font: 11px/1.4 var(--mono); color: var(--ink); background: var(--paper); border: 1px solid var(--accent); padding: 10px 12px; pointer-events: none; }
-  .card small { font-size: 9px; letter-spacing: 2px; color: var(--line); }
-  .card b { color: var(--accent); letter-spacing: 1px; text-transform: uppercase; }
-  .card .price { font-size: 13px; font-weight: 700; margin-top: 4px; }
-  .card .basis, .card .hint { color: var(--line); font-size: 10px; }
-  .card .hint { margin-top: 4px; letter-spacing: 1px; text-transform: uppercase; }
-  .hint-pill { position: absolute; left: 10px; bottom: 56px; font: 10px var(--mono); letter-spacing: 1px;
-    text-transform: uppercase; color: var(--paper); background: var(--accent); padding: 4px 10px; pointer-events: none; }
-  .toolbar { position: absolute; left: 8px; right: 8px; display: flex; gap: 6px; flex-wrap: wrap; pointer-events: none; }
-  .toolbar.top { top: 8px; } .toolbar.bottom { bottom: 8px; align-items: center; }
+  .leaders :global(line) { stroke: var(--ink-muted); stroke-width: 1; stroke-dasharray: 4 3; }
+  .tags :global(.callout) { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; overflow: hidden;
+    background: var(--ground-raised); border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: var(--shadow-float); padding: 4px 8px; }
+  .tags :global(.callout b) { font: 600 14px/18px var(--font-serif); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tags :global(.callout span) { font: 500 12px/16px var(--font-sans); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card { position: absolute; right: var(--space-3); top: 64px; width: min(280px, calc(100% - 24px)); display: flex; flex-direction: column; gap: 2px;
+    background: var(--ground-raised); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-float); padding: var(--space-3) var(--space-4); pointer-events: none; }
+  .card .eyebrow { font: 600 12px/16px var(--font-sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); }
+  .card b { font: 700 20px/26px var(--font-serif); color: var(--ink); }
+  .card span { font: 400 14px/20px var(--font-serif); color: var(--ink-muted); }
+  .card .price { font: 600 16px/24px var(--font-sans); color: var(--ink); margin-top: var(--space-1); }
+  .card .hint { font-size: 13px; margin-top: var(--space-1); }
+  .hint-pill { position: absolute; left: var(--space-3); bottom: 64px; pointer-events: none; }
+  .toolbar { position: absolute; left: var(--space-3); right: var(--space-3); display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; pointer-events: none; }
+  .toolbar.top { top: var(--space-3); left: 112px; } .toolbar.bottom { bottom: var(--space-3); }
   .toolbar > * { pointer-events: auto; }
-  .toolbar button { background: var(--paper); }
-  .toolbar button.on { background: var(--accent); }
-  .toolbar input[type="range"] { flex: 1; min-width: 90px; accent-color: var(--accent); }
+  .toolbar input[type="range"] { flex: 1; min-width: 80px; accent-color: var(--oxblood); }
 </style>

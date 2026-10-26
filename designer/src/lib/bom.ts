@@ -1,6 +1,6 @@
 import { CHIPS } from "./chips";
 import type { Design } from "./design";
-import { boardBounds } from "./geometry";
+import { boardBounds, SHELL_RULES } from "./geometry";
 import { PCB, SHELL } from "./parts-data";
 
 /* Bill of materials: one line per thing you buy or print. These are the units the exploded
@@ -9,7 +9,7 @@ import { PCB, SHELL } from "./parts-data";
 
 export type BomId =
   | "controller" | "switch" | "keycap" | "diode" | "battery" | "pcb"
-  | "ir-led" | "ir-receiver" | "ir-driver" | "resistor" | "shell-bottom" | "shell-top";
+  | "ir-led" | "ir-receiver" | "ir-driver" | "resistor" | "shell" | "plate" | "lid";
 
 export interface BomLine {
   id: BomId;
@@ -27,16 +27,20 @@ const PLA_G_PER_CM3 = 1.24;
 function roundedArea(w: number, h: number, r: number) { return w * h - (4 - Math.PI) * r * r; }
 function perimeter(w: number, h: number, r: number) { return 2 * (w + h) - (8 - 2 * Math.PI) * r; }
 
-export function shellGrams(design: Design): { bottom: number; top: number } {
+/* Printed mass of the three shell parts, from their outlines. */
+export function shellGrams(design: Design): { shell: number; plate: number; lid: number } {
   const b = boardBounds(design);
-  const grow = SHELL.wall + SHELL.clearance, r = PCB.cornerRadius + grow;
+  const grow = SHELL_RULES.wall + SHELL.clearance, r = SHELL_RULES.fillet;
   const w = b.maxX - b.minX + 2 * grow, h = b.maxY - b.minY + 2 * grow;
   const depth = PCB.thickness + Math.max(5.7, 1.5 + design.battery.thicknessMm) + 1;
-  const holes = design.keys.length * 18.5 * 17.5;
-  const bottomMm3 = roundedArea(w, h, r) * SHELL.floor + perimeter(w, h, r) * SHELL.wall * depth;
-  const topMm3 = (roundedArea(w, h, r) - holes) * SHELL.bezel + perimeter(w, h, r) * SHELL.wall * (PCB.thickness + 3.6);
+  const capHoles = design.keys.reduce((sum, k) => sum + (18 * k.w + 0.5) * 17.5, 0);
+  const plateHoles = design.keys.length * SHELL_RULES.plateCutout ** 2;
   const g = (mm3: number) => (mm3 / 1000) * PLA_G_PER_CM3;
-  return { bottom: g(bottomMm3), top: g(topMm3) };
+  return {
+    shell: g((roundedArea(w, h, r) - capHoles) * SHELL.bezel + perimeter(w, h, r) * SHELL_RULES.wall * (PCB.thickness + 3.6)),
+    plate: g((roundedArea(w - 2 * grow, h - 2 * grow, r - grow) - plateHoles) * SHELL_RULES.plate),
+    lid: g(roundedArea(w, h, r) * SHELL.floor + perimeter(w, h, r) * SHELL_RULES.wall * depth),
+  };
 }
 
 export function bom(design: Design): BomLine[] {
@@ -65,10 +69,9 @@ export function bom(design: Design): BomLine[] {
   if (design.options.batterySense && !chip.batteryDividerBuiltIn) resistors += 2;
   if (resistors) lines.push({ id: "resistor", label: "Resistor", spec: "0805; IR current limit and battery divider", qty: resistors, unitUsd: 0.01, basis: "Distributor, qty 100", kind: "buy" });
   const grams = shellGrams(design);
-  lines.push(
-    { id: "shell-top", label: `Top bezel · ${design.shell.family}`, spec: `Printed, about ${grams.top.toFixed(0)} g`, qty: 1, unitUsd: Math.round(grams.top * FILAMENT_USD_PER_G * 100) / 100, basis: "Filament at $25/kg", kind: "print" },
-    { id: "shell-bottom", label: `Bottom tray · ${design.shell.family}`, spec: `Printed, about ${grams.bottom.toFixed(0)} g`, qty: 1, unitUsd: Math.round(grams.bottom * FILAMENT_USD_PER_G * 100) / 100, basis: "Filament at $25/kg", kind: "print" },
-  );
+  const printed = (id: "shell" | "plate" | "lid", label: string, grams: number): BomLine =>
+    ({ id, label, spec: `Printed in butter PLA or PETG, about ${grams.toFixed(0)} g`, qty: 1, unitUsd: Math.round(grams * FILAMENT_USD_PER_G * 100) / 100, basis: "Filament at $25/kg", kind: "print" });
+  lines.push(printed("shell", "The shell", grams.shell), printed("plate", "The plate", grams.plate), printed("lid", "The lid", grams.lid));
   return lines;
 }
 

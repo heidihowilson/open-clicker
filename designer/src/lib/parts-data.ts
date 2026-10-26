@@ -3,8 +3,9 @@
 
 /** Kailh Choc V1 (PG1350). Footprint from Ergogen's choc.js; heights approx (15 × 15 × 8 mm overall per retailer listings). */
 export const CHOC = {
-  base: { size: 15, height: 2.2 },
-  top: { size: 13.8, height: 2.8 },
+  /* The bottom housing passes through the plate cutout; the wider top housing sits on it. */
+  bottom: { size: 13.8, height: 2.2 },
+  top: { size: 15, height: 2.8 },
   stem: { width: 1.2, depth: 3.0, height: 1.0, spacing: 5.7 },
   centerPost: { diameter: 3.429, length: 2.65 },
   sidePosts: { diameter: 1.7018, x: 5.5, length: 2.0 },

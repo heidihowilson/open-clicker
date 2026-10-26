@@ -22,9 +22,13 @@ Push `main` to the homelab remote to deploy: `git push homelab main`, where `hom
 - **Pin planner** (`src/lib/matrix.ts`): keys form a diode matrix whose columns are wake pins, so any key wakes the chip. Battery sensing takes an analog pin first, IR parts take plain pins next, and strapping pins are used last.
 - **Checks** (`src/lib/checks.ts`): pin budget, keycap overlap (rotated rectangles), profile-switch keys, IR actions without a transmitter, battery fit, and unported firmware.
 
+## Look and feel
+
+The tool follows the **Open Clicker** design system in [`docs/brand/`](../docs/brand/README.md): butter shell, an oxblood cluster, one orange power key, ivory commands, Fraunces lettering and Fredoka labels, and the Ivory and Late show themes. `src/ds/` holds its tokens and component styles; `public/legends/` and `public/logo/` hold its glyphs and mark. The layout is the brand book's tool shell: top bar, mode rail (select, move, add key, measure, 3D), viewport, properties and a status strip. The 2D sheet draws at exactly 4 px/mm on the Choc grid.
+
 ## 3D model
 
-`src/lib/parts.ts` builds the assembly from published footprints (`src/lib/parts-data.ts` names each source): Kailh Choc V1 posts and pins from Ergogen's footprint, the XIAO outline and 14-pad grid from Seeed's OPL KiCad library, MBK keycap size, SOD-123 diodes, the LiPo, IR parts and a two-part shell. The PCB carries real switch holes. Heights marked approximate wait for calipers. The view opens shaded; **Blueprint** switches to line work. **Explode** separates the build into the units you buy or print, never finer: one XIAO, each switch, each keycap, each diode and resistor, the LiPo, the IR parts, the PCB and the two shell halves. Tap one to ghost the rest and fly to it with its price; tap again to return. Phones get a tabbed layout.
+`src/lib/parts.ts` builds the assembly from published footprints (`src/lib/parts-data.ts` names each source) in the brand colourway: the shell, plate and lid in butter, caps coloured by what the key does, legends from the glyph set and the wordmark on the chin. **Explode** separates it into the units you buy or print, never finer. Tap one to see it with its price; tap again to go back.
 
 ## Cost
 

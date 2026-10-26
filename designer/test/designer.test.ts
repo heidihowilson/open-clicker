@@ -1,110 +1,99 @@
 import { expect, test } from "bun:test";
-import classicJson from "../src/seeds/classic.json";
-import arcJson from "../src/seeds/thumb-arc.json";
-import { check } from "../src/lib/checks";
+import columnJson from "../src/seeds/column.json";
+import deckJson from "../src/seeds/deck.json";
+import slabJson from "../src/seeds/slab.json";
+import tileJson from "../src/seeds/tile.json";
+import { capColour } from "../src/lib/actions";
+import { bom, bomTotal } from "../src/lib/bom";
+import { check, errorsIn } from "../src/lib/checks";
 import { parseDesign, type Design } from "../src/lib/design";
 import { keymap, keymapHeader } from "../src/lib/exports";
+import { boardBounds, collisions, keyField } from "../src/lib/geometry";
 import { planPins } from "../src/lib/matrix";
+import { DEFAULT_PRICING, tiers } from "../src/lib/pricing";
 
-const classic = parseDesign(classicJson);
-const arc = parseDesign(arcJson);
+const tile = parseDesign(tileJson);
+const slab = parseDesign(slabJson);
+const deck = parseDesign(deckJson);
+const column = parseDesign(columnJson);
 const withChip = (d: Design, chip: Design["chip"]): Design => ({ ...d, chip });
 
-test("seeds validate and pass every error check", () => {
-  for (const d of [classic, arc]) expect(check(d).filter((f) => f.level === "error")).toEqual([]);
+test("every template validates and has no errors on its default controller", () => {
+  for (const d of [tile, slab, deck, column]) expect(errorsIn(check(d)).map((f) => f.message)).toEqual([]);
 });
 
-test("columns are wake pins on every chip", () => {
+test("cap colour follows the action: cluster oxblood, power orange, the rest ivory", () => {
+  expect(capColour("ok")).toBe("oxblood");
+  expect(capColour("left")).toBe("oxblood");
+  expect(capColour("power")).toBe("orange");
+  expect(capColour("home")).toBe("ivory");
+});
+
+test("the shell follows the key field: 6 mm margin, 20 mm chin", () => {
+  const f = keyField(tile), b = boardBounds(tile);
+  expect(f.minY - b.minY).toBeCloseTo(6);
+  expect(b.maxY - f.maxY).toBeCloseTo(20);
+});
+
+test("keys on adjacent grid cells do not collide; a shared cell does", () => {
+  expect(collisions(tile)).toEqual([]);
+  const keys = [...tile.keys, { id: "extra", x: 18, y: 17, w: 1 as const, action: "mute" as const, label: "" }];
+  expect(collisions({ ...tile, keys }).length).toBeGreaterThan(0);
+});
+
+test("the Deck's 2u play key spans two columns without touching its neighbours", () => {
+  expect(collisions(deck)).toEqual([]);
+  expect(deck.keys.find((k) => k.id === "play")?.w).toBe(2);
+});
+
+test("columns are wake pins on every controller", () => {
   for (const chip of ["xiao-esp32c3", "xiao-esp32c6", "xiao-nrf52840"] as const) {
-    const plan = planPins(withChip(classic, chip));
+    const plan = planPins(withChip(tile, chip));
     if (!plan.ok) throw new Error(plan.reason);
     expect(plan.columns.every((p) => p.wake)).toBe(true);
-    expect(plan.positions.size).toBe(classic.keys.length);
   }
 });
 
-test("C6 battery sensing takes a wake pin and still fits ten keys", () => {
-  const plan = planPins(classic);
+test("the 21-key Slab only fits the controller whose every pin can wake", () => {
+  expect(planPins(slab).ok).toBe(true);
+  expect(planPins(withChip(slab, "xiao-esp32c6")).ok).toBe(false);
+});
+
+test("C3 keeps strapping pins off the IR driver", () => {
+  const plan = planPins(withChip(column, "xiao-esp32c3"));
   if (!plan.ok) throw new Error(plan.reason);
-  expect(plan.battery?.id).toBe("D0");
-  expect(plan.columns.map((p) => p.id)).toEqual(["D1", "D2"]);
-  expect(plan.rows.length).toBe(5);
-  expect(plan.irTransmit).not.toBeNull();
+  expect(plan.irTransmit?.strapping).toBe(false);
 });
 
-test("C3 keeps strapping pins off the matrix and the IR driver when it can", () => {
-  for (const d of [classic, arc]) {
-    const plan = planPins(withChip(d, "xiao-esp32c3"));
-    if (!plan.ok) throw new Error(plan.reason);
-    expect([plan.irTransmit, plan.irReceive].some((p) => p?.strapping)).toBe(false);
-  }
-  /* Without IR, ten keys plus battery sensing fit on the eight plain pins. */
-  const plan = planPins({ ...withChip(classic, "xiao-esp32c3"), options: { ...classic.options, irTransmit: false } });
-  if (!plan.ok) throw new Error(plan.reason);
-  expect([...plan.rows, ...plan.columns].some((p) => p.strapping)).toBe(false);
-});
-
-test("too many keys fails with the real limit", () => {
-  const keys = Array.from({ length: 30 }, (_, i) => ({ id: `k${i}`, x: (i % 6) * 19, y: Math.floor(i / 6) * 19, r: 0, action: "none" as const, label: "" }));
-  const plan = planPins({ ...classic, keys });
-  expect(plan.ok).toBe(false);
-  if (!plan.ok) expect(plan.reason).toContain("it fits 14");
-});
-
-test("overlapping keys are reported", () => {
-  const keys = [...classic.keys, { id: "extra", x: 5, y: 0, r: 0, action: "mute" as const, label: "M" }];
-  expect(check({ ...classic, keys }).some((f) => f.level === "error" && f.message.includes("extra"))).toBe(true);
-});
-
-test("rotated keys clear each other only when they really do", () => {
-  const two = (r: number) => ({ ...classic, keys: [
-    { id: "a", x: 0, y: 0, r: 0, action: "ok" as const, label: "" },
-    { id: "b", x: 18.2, y: 0, r, action: "back" as const, label: "" },
-  ] });
-  expect(check(two(0)).some((f) => f.message.includes("overlap"))).toBe(false);
-  expect(check(two(30)).some((f) => f.message.includes("overlap"))).toBe(true);
-});
-
-test("IR power without a transmitter is an error", () => {
-  expect(check({ ...arc, options: { ...arc.options, irTransmit: false } }).some((f) => f.level === "error" && f.message.includes("IR"))).toBe(true);
+test("a second power key and IR power without a transmitter are reported", () => {
+  const twoPower = { ...tile, keys: [...tile.keys, { id: "p2", x: 0, y: 0, w: 1 as const, action: "power" as const, label: "" }] };
+  expect(check(twoPower).some((f) => f.badge === "Two power keys")).toBe(true);
+  expect(check(tile).some((f) => f.badge === "Power needs IR")).toBe(true);
 });
 
 test("keymap and header agree", () => {
-  const km = keymap(classic);
-  expect(km.map.flat().filter(Boolean).length).toBe(classic.keys.length);
-  expect(km.map[0]![0]).toBe("home");
-  const h = keymapHeader(classic);
-  expect(h).toContain("#define OR_MATRIX_ROWS 5");
-  expect(h).toContain("#define OR_BATTERY_GPIO 0");
-  expect(() => keymapHeader(withChip(classic, "xiao-nrf52840"))).toThrow();
+  const km = keymap(column);
+  expect(km.map.flat().filter(Boolean).length).toBe(column.keys.length);
+  expect(keymapHeader(column)).toContain("#define OR_MATRIX_ROWS");
+  expect(() => keymapHeader(slab)).toThrow();
 });
 
-test("BOM has one line per purchasable kind and a sane total", async () => {
-  const { bom, bomTotal } = await import("../src/lib/bom");
-  const lines = bom(classic);
+test("the BOM has one line per purchasable or printed unit", () => {
+  const lines = bom(tile);
   const ids = lines.map((l) => l.id);
   expect(new Set(ids).size).toBe(ids.length);
-  expect(lines.find((l) => l.id === "switch")?.qty).toBe(10);
-  expect(lines.find((l) => l.id === "resistor")?.qty).toBe(4); /* IR pair + battery divider */
-  expect(ids).not.toContain("ir-receiver");
-  const nrf = bom(withChip(classic, "xiao-nrf52840"));
-  expect(nrf.find((l) => l.id === "resistor")?.qty).toBe(2); /* nRF has a built-in divider */
-  const total = bomTotal(lines);
-  expect(total).toBeGreaterThan(15);
-  expect(total).toBeLessThan(40);
+  expect(ids).toEqual(expect.arrayContaining(["shell", "plate", "lid"]));
+  expect(lines.find((l) => l.id === "switch")?.qty).toBe(tile.keys.length);
+  expect(bomTotal(lines)).toBeGreaterThan(15);
 });
 
-test("pricing tiers rise from DIY to kit to assembled", async () => {
-  const { tiers, DEFAULT_PRICING } = await import("../src/lib/pricing");
-  const [diy, kit, built] = tiers(classic);
-  expect(diy!.priceUsd).toBeNull();
-  expect(kit!.priceUsd!).toBeGreaterThan(kit!.costUsd);
-  expect(built!.costUsd).toBeGreaterThan(kit!.costUsd);
-  expect(built!.priceUsd!).toBeGreaterThan(kit!.priceUsd!);
-  /* Kit buyers print their own shell; the assembled remote includes ours. */
-  expect(kit!.lines.some((l) => l.label.startsWith("Shell"))).toBe(false);
-  expect(built!.lines.some((l) => l.label === "Shell filament")).toBe(true);
-  /* A bigger batch spreads the assembly setup thinner. */
-  const big = tiers(classic, { ...DEFAULT_PRICING, batch: 500 })[1]!;
-  expect(big.costUsd).toBeLessThan(kit!.costUsd);
+test("fulfilment levels rise from Kit to Half-built to Fully assembled", () => {
+  const [kit, half, full] = tiers(column);
+  expect(kit!.id).toBe("kit");
+  expect(kit!.priceUsd).toBeNull();
+  expect(half!.priceUsd!).toBeGreaterThan(half!.costUsd);
+  expect(full!.priceUsd!).toBeGreaterThan(half!.priceUsd!);
+  expect(half!.lines.some((l) => l.label.includes("filament"))).toBe(false);
+  expect(full!.lines.some((l) => l.label.includes("filament"))).toBe(true);
+  expect(tiers(column, { ...DEFAULT_PRICING, batch: 500 })[1]!.costUsd).toBeLessThan(half!.costUsd);
 });

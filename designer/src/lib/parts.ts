@@ -1,22 +1,22 @@
 import * as THREE from "three";
-import { KEYCAPS, type Design, type Key } from "./design";
-import { boardBounds, xiaoPlacement, type Bounds } from "./geometry";
+import { capWidth, KEYCAPS, type Design, type Key } from "./design";
+import { boardBounds, keyField, SHELL_RULES, xiaoPlacement, type Bounds } from "./geometry";
 import { CHOC, DIODE, IR, MBK, PCB, SHELL, XIAO_BOARD } from "./parts-data";
 import { CHIPS } from "./chips";
-import type { Action } from "./design";
+import { capColour, glyphUrl, legendOf } from "./actions";
 import { bom, usd, type BomId, type BomLine } from "./bom";
 
 /* World axes: X = design x, Z = design y (toward the bottom of the remote), Y = up.
  * The PCB top surface is Y = 0. */
 
-/* Keycap colours for the solid view, grouped by job. */
-const ACTION_TINT: Record<Action, string> = {
-  up: "#ece6d6", down: "#ece6d6", left: "#ece6d6", right: "#ece6d6", ok: "#f6f3ec",
-  back: "#a8b0b5", home: "#a8b0b5", escape: "#a8b0b5", play: "#e58a3c", space: "#e58a3c",
-  volume_up: "#e58a3c", volume_down: "#e58a3c", mute: "#e58a3c", ir_power: "#d4483b", none: "#5d6560",
-};
+/* The one colourway (brand book, Hardware → Colourway): butter shell, plate and lid; ivory,
+ * oxblood and orange caps by what the key does; oxblood lettering. */
+export const BRAND = {
+  butter: "#f3d77a", oxblood: "#692b38", orange: "#c65d2e", ivory: "#f7f1e5", capIvory: "#fdf8ee",
+} as const;
+const CAP_TINT = { ivory: BRAND.capIvory, oxblood: BRAND.oxblood, orange: BRAND.orange } as const;
 
-export type Role = "fr4" | "copper" | "plastic-dark" | "plastic-light" | "metal" | "chip" | "cap" | "battery" | "shell" | "led" | "wire";
+export type Role = "fr4" | "copper" | "plastic-dark" | "plastic-light" | "metal" | "chip" | "cap" | "battery" | "shell" | "led" | "wire" | "slot";
 export interface PartInfo { layer: number; label: string; detail: string }
 
 /* Marks a purchasable unit: the explode and focus never split it further. */
@@ -64,23 +64,18 @@ export function roundedRect(x0: number, y0: number, x1: number, y1: number, radi
 const outline = (b: Bounds, grow: number, radius: number) => roundedRect(b.minX - grow, b.minY - grow, b.maxX + grow, b.maxY + grow, radius + grow);
 
 function local(key: Key, x: number, y: number): { x: number; y: number } {
-  const a = (key.r * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
-  return { x: key.x + x * c - y * s, y: key.y + x * s + y * c };
+  return { x: key.x + x, y: key.y + y };
 }
 function circleHole(x: number, y: number, d: number): THREE.Path {
   const p = new THREE.Path(); p.absarc(x, y, d / 2, 0, Math.PI * 2, true); return p;
 }
-function rotatedRectHole(key: Key, w: number, d: number): THREE.Path {
-  const pts = [[-w / 2, -d / 2], [-w / 2, d / 2], [w / 2, d / 2], [w / 2, -d / 2]].map(([x, y]) => local(key, x!, y!));
+function rectHole(key: Key, w: number, d: number, r = 0.6): THREE.Path {
   const p = new THREE.Path();
-  p.moveTo(pts[0]!.x, pts[0]!.y);
-  for (const q of pts.slice(1)) p.lineTo(q.x, q.y);
-  p.closePath();
+  p.setFromPoints(roundedRect(key.x - w / 2, key.y - d / 2, key.x + w / 2, key.y + d / 2, r).getPoints(4).reverse());
   return p;
 }
 function placeOnKey(object: THREE.Object3D, key: Key) {
   object.position.x = key.x; object.position.z = key.y;
-  object.rotation.y = (-key.r * Math.PI) / 180;
 }
 
 /* XIAO footprint coordinates -> design coordinates. The module hangs under the board,
@@ -115,10 +110,10 @@ export function buildPcb(design: Design, bounds: Bounds): THREE.Group {
 
 export function buildSwitch(key: Key): THREE.Group {
   const g = new THREE.Group();
-  g.add(box(CHOC.base.size, CHOC.base.height, CHOC.base.size, "plastic-dark", 0, CHOC.base.height / 2, 0));
-  const topY = CHOC.base.height + CHOC.top.height / 2;
+  g.add(box(CHOC.bottom.size, CHOC.bottom.height, CHOC.bottom.size, "plastic-dark", 0, CHOC.bottom.height / 2, 0));
+  const topY = CHOC.bottom.height + CHOC.top.height / 2;
   g.add(box(CHOC.top.size, CHOC.top.height, CHOC.top.size, "plastic-dark", 0, topY, 0));
-  for (const sx of [-1, 1]) g.add(box(CHOC.stem.width, CHOC.stem.height, CHOC.stem.depth, "plastic-light", (sx * CHOC.stem.spacing) / 2, CHOC.base.height + CHOC.top.height + CHOC.stem.height / 2, 0));
+  for (const sx of [-1, 1]) g.add(box(CHOC.stem.width, CHOC.stem.height, CHOC.stem.depth, "plastic-light", (sx * CHOC.stem.spacing) / 2, CHOC.bottom.height + CHOC.top.height + CHOC.stem.height / 2, 0));
   const post = cylinder(CHOC.centerPost.diameter - 0.2, CHOC.centerPost.length, "plastic-dark");
   post.position.y = -CHOC.centerPost.length / 2; g.add(post);
   for (const sx of [-1, 1]) { const s = cylinder(CHOC.sidePosts.diameter - 0.2, CHOC.sidePosts.length, "plastic-dark", 12); s.position.set(sx * CHOC.sidePosts.x, -CHOC.sidePosts.length / 2, 0); g.add(s); }
@@ -128,29 +123,40 @@ export function buildSwitch(key: Key): THREE.Group {
   return item(g, "switch");
 }
 
-function legendTexture(text: string): THREE.CanvasTexture {
-  const c = document.createElement("canvas"); c.width = 256; c.height = 256;
+/* Legend on the cap face: a glyph from the brand set, or Fredoka uppercase. Ink is oxblood on
+ * ivory caps and ivory on oxblood and orange caps. */
+function legendTexture(key: Key): THREE.CanvasTexture {
+  const c = document.createElement("canvas"); c.width = 256 * key.w; c.height = 256;
   const g = c.getContext("2d")!;
-  g.clearRect(0, 0, 256, 256);
-  g.fillStyle = "#ffffff"; g.font = "600 92px ui-monospace, 'JetBrains Mono', Menlo, monospace";
-  g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(text, 128, 136);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  const ink = capColour(key.action) === "ivory" ? "oxblood" : "ivory";
+  const legend = legendOf(key.action, key.label);
+  if (legend.glyph) {
+    const img = new Image();
+    img.onload = () => { g.drawImage(img, c.width / 2 - 52, 76, 104, 104); t.needsUpdate = true; };
+    img.src = glyphUrl(legend.glyph, ink);
+  } else if (legend.text) {
+    g.fillStyle = ink === "oxblood" ? BRAND.oxblood : BRAND.ivory;
+    g.font = `600 ${legend.text.length > 3 ? 54 : 70}px Fredoka, "Avenir Next Rounded", sans-serif`;
+    g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(legend.text, c.width / 2, 134);
+  }
   return t;
 }
 
 export function buildKeycap(design: Design, key: Key): THREE.Group {
   const cap = KEYCAPS[design.keycap];
+  const width = capWidth(key.w);
   const g = new THREE.Group();
   /* The bevel grows the outline, so draw the shape inset by the bevel size. */
   const b = 0.45;
-  const shape = roundedRect(-cap.widthMm / 2 + b, -cap.depthMm / 2 + b, cap.widthMm / 2 - b, cap.depthMm / 2 - b, MBK.radius - b);
+  const shape = roundedRect(-width / 2 + b, -cap.depthMm / 2 + b, width / 2 - b, cap.depthMm / 2 - b, MBK.radius - b);
   const body = slab(shape, 0, cap.heightMm, "cap", b);
-  body.userData.tint = ACTION_TINT[key.action];
+  body.userData.tint = CAP_TINT[capColour(key.action)];
   g.add(body);
   /* Two stem sockets under the cap. */
   for (const sx of [-1, 1]) g.add(box(CHOC.stem.width + 1.2, 1.2, CHOC.stem.depth + 1.2, "cap", (sx * CHOC.stem.spacing) / 2, -0.6, 0));
-  const legend = new THREE.Mesh(new THREE.PlaneGeometry(cap.widthMm * 0.8, cap.widthMm * 0.8),
-    new THREE.MeshBasicMaterial({ map: legendTexture(key.label || key.action.slice(0, 3).toUpperCase()), transparent: true, depthWrite: false }));
+  const legend = new THREE.Mesh(new THREE.PlaneGeometry(cap.depthMm * 0.8 * key.w, cap.depthMm * 0.8),
+    new THREE.MeshBasicMaterial({ map: legendTexture(key), transparent: true, depthWrite: false }));
   legend.rotation.x = -Math.PI / 2; legend.position.y = cap.heightMm + 0.02;
   legend.userData.legend = true;
   g.add(legend);
@@ -198,7 +204,7 @@ export function buildDiodes(design: Design): THREE.Group {
     d.add(box(0.4, 0.15, DIODE.width + 0.02, "plastic-light", -DIODE.length / 2 + 0.5, -DIODE.height - 0.01, 0));
     for (const sx of [-1, 1]) d.add(box(DIODE.lead, 0.2, 0.9, "metal", sx * (DIODE.length / 2 + DIODE.lead / 2), -0.1, 0));
     const p = local(key, DIODE.offset.x, DIODE.offset.y);
-    d.position.set(p.x, -PCB.thickness, p.y); d.rotation.y = (-key.r * Math.PI) / 180;
+    d.position.set(p.x, -PCB.thickness, p.y);
     g.add(item(d, "diode"));
   }
   return g;
@@ -263,26 +269,61 @@ export function buildDivider(design: Design, bounds: Bounds): THREE.Group | null
   return g;
 }
 
-export function buildShell(design: Design, bounds: Bounds): { bottom: THREE.Group; top: THREE.Group } {
+/* The wordmark on the chin: "Open" over "Clicker", Fraunces 900, oxblood, left-aligned with
+ * the key field (brand book, Hardware → The face). */
+function wordmark(width: number): THREE.Mesh {
+  const c = document.createElement("canvas"); c.width = 512; c.height = 256;
+  const g = c.getContext("2d")!;
+  g.fillStyle = BRAND.oxblood; g.font = '900 104px Fraunces, "Cooper Black", Georgia, serif'; g.textBaseline = "alphabetic";
+  g.fillText("Open", 4, 100); g.fillText("Clicker", 4, 210);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(width, width / 2), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2;
+  m.userData.legend = true;
+  return m;
+}
+
+/* Three printed parts (brand book, Hardware → The shell): the shell (face and walls, open at
+ * the back), the plate the switches clip into, and the lid. */
+export function buildShell(design: Design, bounds: Bounds): { lid: THREE.Group; shell: THREE.Group; plate: THREE.Group } {
   const cap = KEYCAPS[design.keycap];
   const depth = PCB.thickness + Math.max(1.2 + 4.5, DIODE.height + 0.4 + design.battery.thicknessMm) + 1;
-  const bottom = new THREE.Group();
-  const outer = outline(bounds, SHELL.wall + SHELL.clearance, PCB.cornerRadius);
-  const wall = outline(bounds, SHELL.wall + SHELL.clearance, PCB.cornerRadius);
-  wall.holes.push(outline(bounds, SHELL.clearance, PCB.cornerRadius));
-  bottom.add(slab(outer, -depth - SHELL.floor, SHELL.floor, "shell"));
-  bottom.add(slab(wall, -depth, depth - PCB.thickness, "shell"));
-  item(bottom, "shell-bottom");
+  const grow = SHELL_RULES.wall + SHELL.clearance, radius = SHELL_RULES.fillet;
+  const cx = (bounds.minX + bounds.maxX) / 2;
 
-  const top = new THREE.Group();
-  const bezel = outline(bounds, SHELL.wall + SHELL.clearance, PCB.cornerRadius);
-  for (const key of design.keys) bezel.holes.push(rotatedRectHole(key, cap.widthMm + 1, cap.depthMm + 1));
-  const rim = outline(bounds, SHELL.wall + SHELL.clearance, PCB.cornerRadius);
-  rim.holes.push(outline(bounds, SHELL.clearance, PCB.cornerRadius));
-  top.add(slab(rim, -PCB.thickness, PCB.thickness + 3.6, "shell"));
-  top.add(slab(bezel, 3.6, SHELL.bezel, "shell"));
-  item(top, "shell-top");
-  return { bottom, top };
+  const lid = new THREE.Group();
+  const walls = outline(bounds, grow, radius - grow);
+  walls.holes.push(outline(bounds, SHELL.clearance, radius - grow));
+  lid.add(slab(outline(bounds, grow, radius - grow), -depth - SHELL.floor, SHELL.floor, "shell"));
+  lid.add(slab(walls, -depth, depth - PCB.thickness, "shell"));
+  /* USB-C opening, centred on the bottom edge. */
+  lid.add(box(XIAO_BOARD.usb.width + 0.6, XIAO_BOARD.usb.height + 0.6, grow + 0.2, "slot", cx, -PCB.thickness - 1.3 - XIAO_BOARD.usb.height / 2, bounds.maxY + grow / 2));
+  item(lid, "lid");
+
+  const plate = new THREE.Group();
+  const plateShape = outline(bounds, 0, radius - grow);
+  for (const key of design.keys) plateShape.holes.push(rectHole(key, SHELL_RULES.plateCutout, SHELL_RULES.plateCutout, 0.3));
+  plate.add(slab(plateShape, CHOC.bottom.height - SHELL_RULES.plate, SHELL_RULES.plate, "shell"));
+  item(plate, "plate");
+
+  const shell = new THREE.Group();
+  const face = outline(bounds, grow, radius - grow);
+  for (const key of design.keys) face.holes.push(rectHole(key, capWidth(key.w) + 1, cap.depthMm + 1));
+  const rim = outline(bounds, grow, radius - grow);
+  rim.holes.push(outline(bounds, SHELL.clearance, radius - grow));
+  shell.add(slab(rim, -PCB.thickness, PCB.thickness + 3.6, "shell"));
+  const faceMesh = slab(face, 3.6, SHELL.bezel, "shell");
+  faceMesh.userData.noEdges = true; /* triangulation edges around the key openings read as scratches */
+  shell.add(faceMesh);
+  const field = keyField(design);
+  const mark = wordmark(30);
+  mark.position.set(field.minX + 15, 3.6 + SHELL.bezel + 0.02, bounds.maxY - SHELL_RULES.chin / 2 + 1);
+  shell.add(mark);
+  /* The IR window: a 6 × 2 mm slot centred on the top edge, only on IR builds. */
+  if (design.options.irTransmit || design.options.irReceive)
+    shell.add(box(6, 2, grow + 0.2, "slot", cx, 2, bounds.minY - grow / 2));
+  item(shell, "shell");
+  return { lid, shell, plate };
 }
 
 /* Callout text for a layer: the BOM lines it holds, with quantity and unit price. */
@@ -312,8 +353,8 @@ export function buildAssembly(design: Design): THREE.Group {
   const ir = buildIr(design, bounds);
   if (ir) ir.userData.part = { layer: 4, label: "IR", detail: describe(lines, ["ir-led", "ir-driver", "ir-receiver"]) };
   const parts = [
-    wrap(shell.bottom, 0, ["shell-bottom"]), wrap(buildBattery(design, bounds), 1, ["battery"]), wrap(buildXiao(design, bounds), 1.4, ["controller"]),
-    back, wrap(buildPcb(design, bounds), 3, ["pcb"]), switches, ir, wrap(shell.top, 5, ["shell-top"]), caps,
+    wrap(shell.lid, 0, ["lid"]), wrap(buildBattery(design, bounds), 1, ["battery"]), wrap(buildXiao(design, bounds), 1.4, ["controller"]),
+    back, wrap(buildPcb(design, bounds), 3, ["pcb"]), wrap(shell.plate, 3.6, ["plate"]), switches, ir, wrap(shell.shell, 5, ["shell"]), caps,
   ];
   for (const p of parts) if (p) root.add(p);
   return root;

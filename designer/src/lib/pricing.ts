@@ -8,7 +8,8 @@ import { boardBounds } from "./geometry";
 
 export interface PriceLine { label: string; qty: number; unitUsd: number; basis: string }
 export interface Tier {
-  id: "diy" | "kit" | "assembled";
+  /** Fulfilment levels, in brand order: Kit, Half-built, Fully assembled. */
+  id: "kit" | "half-built" | "assembled";
   title: string;
   summary: string;
   youDo: string;
@@ -75,9 +76,9 @@ function labor(minutes: number, label: string, a: PricingAssumptions): PriceLine
 
 export function shellPrint(design: Design): PriceLine[] {
   const g = shellGrams(design);
-  const grams = g.top + g.bottom;
+  const grams = g.shell + g.plate + g.lid;
   return [
-    { label: "Shell filament", qty: 1, unitUsd: round(grams * FILAMENT_USD_PER_G), basis: `About ${grams.toFixed(0)} g at $25/kg` },
+    { label: "Shell, plate and lid filament", qty: 1, unitUsd: round(grams * FILAMENT_USD_PER_G), basis: `About ${grams.toFixed(0)} g at $25/kg` },
     { label: "Printer time", qty: 1, unitUsd: round((grams / PRINT_G_PER_HOUR) * PRINTER_USD_PER_HOUR), basis: `About ${(grams / PRINT_G_PER_HOUR).toFixed(1)} h at $${PRINTER_USD_PER_HOUR}/h` },
   ];
 }
@@ -97,23 +98,23 @@ export function tiers(design: Design, a: PricingAssumptions = DEFAULT_PRICING): 
 
   return [
     {
-      id: "diy", title: "Solder and print yourself",
+      id: "kit", title: "Kit",
       summary: "Buy every part at retail, order bare PCBs, solder everything, print the shell.",
-      youDo: "Solder diodes, resistors, XIAO and switches; print and assemble.",
+      youDo: "You solder, you print.",
       lines: diyLines, costUsd: sum(diyLines), priceUsd: null,
       extraUsd: round(2 * 4 + 10), extraNote: "Plus once per order: bare PCBs come in fives (about $8 for the spares) and about $10 shipping. Solder and tools not included.",
     },
     {
-      id: "kit", title: "No-solder kit, print your own shell",
+      id: "half-built", title: "Half-built",
       summary: "Assembled PCB with hot-swap sockets, XIAO fitted and flashed, switches, keycaps and battery.",
-      youDo: "Push in switches and caps, plug in the battery, print the shell.",
+      youDo: "We solder, you print.",
       lines: kit, costUsd: kitCost, priceUsd: price(kitCost),
       extraUsd: shellFilament, extraNote: "Plus your own filament for the shell.",
     },
     {
       id: "assembled", title: "Fully assembled",
       summary: "A finished, tested remote in one of our printed shells.",
-      youDo: "Charge it and pair it.",
+      youDo: "You click.",
       lines: built, costUsd: builtCost, priceUsd: price(builtCost),
       extraUsd: 0, extraNote: "",
     },

@@ -1,7 +1,11 @@
-import { KEYCAPS, type Design, type Key } from "./design";
+import { capWidth, KEYCAPS, type Design, type Key } from "./design";
 
 export interface Point { x: number; y: number }
 export interface Bounds { minX: number; minY: number; maxX: number; maxY: number }
+
+/* Shell rules from the Open Clicker brand book (Hardware): the outline is the key field's
+ * bounding box plus a 6 mm margin on the sides and top and a 20 mm chin at the bottom. */
+export const SHELL_RULES = { margin: 6, chin: 20, fillet: 8, edgeFillet: 3, wall: 2, wallMin: 1.6, plate: 1.5, plateCutout: 14 } as const;
 
 /* XIAO module envelope (Seeed OPL footprint), mounted on the back with USB-C at the bottom
  * edge. Height is the board plus the USB-C receptacle. */
@@ -9,52 +13,41 @@ export const XIAO = { widthMm: 17.8, lengthMm: 21, heightMm: 4.5, usbEndMm: 12.0
 export const CLEARANCE_MM = 0.5;
 
 export function corners(key: Key, widthMm: number, depthMm: number): Point[] {
-  const a = (key.r * Math.PI) / 180;
-  const cos = Math.cos(a), sin = Math.sin(a);
-  return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => {
-    const dx = (sx! * widthMm) / 2, dy = (sy! * depthMm) / 2;
-    return { x: key.x + dx * cos - dy * sin, y: key.y + dx * sin + dy * cos };
-  });
+  return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => ({ x: key.x + (sx! * widthMm) / 2, y: key.y + (sy! * depthMm) / 2 }));
 }
 
-function project(points: Point[], axis: Point): [number, number] {
-  const values = points.map((p) => p.x * axis.x + p.y * axis.y);
-  return [Math.min(...values), Math.max(...values)];
+export function keyField(design: Design): Bounds {
+  const depth = KEYCAPS[design.keycap].depthMm;
+  const pts = design.keys.flatMap((k) => corners(k, capWidth(k.w), depth));
+  return {
+    minX: Math.min(...pts.map((p) => p.x)), maxX: Math.max(...pts.map((p) => p.x)),
+    minY: Math.min(...pts.map((p) => p.y)), maxY: Math.max(...pts.map((p) => p.y)),
+  };
 }
 
-/* Separating-axis test for two rotated rectangles. */
-function overlaps(a: Point[], b: Point[]): boolean {
-  for (const shape of [a, b]) {
-    for (let i = 0; i < 2; i++) {
-      const p = shape[i]!, q = shape[i + 1]!;
-      const axis = { x: q.y - p.y, y: p.x - q.x };
-      const [amin, amax] = project(a, axis), [bmin, bmax] = project(b, axis);
-      if (amax <= bmin || bmax <= amin) return false;
-    }
-  }
-  return true;
-}
-
+/* Keys sit on the grid, so two caps collide exactly when their rectangles overlap. */
 export function collisions(design: Design): [string, string][] {
-  const cap = KEYCAPS[design.keycap];
-  const shapes = design.keys.map((k) => ({ id: k.id, pts: corners(k, cap.widthMm + CLEARANCE_MM, cap.depthMm + CLEARANCE_MM) }));
+  const depth = KEYCAPS[design.keycap].depthMm + CLEARANCE_MM;
   const hits: [string, string][] = [];
-  for (let i = 0; i < shapes.length; i++)
-    for (let j = i + 1; j < shapes.length; j++)
-      if (overlaps(shapes[i]!.pts, shapes[j]!.pts)) hits.push([shapes[i]!.id, shapes[j]!.id]);
+  const ks = design.keys;
+  for (let i = 0; i < ks.length; i++)
+    for (let j = i + 1; j < ks.length; j++) {
+      const a = ks[i]!, b = ks[j]!;
+      const dx = Math.abs(a.x - b.x) - (capWidth(a.w) + capWidth(b.w)) / 2 - CLEARANCE_MM;
+      const dy = Math.abs(a.y - b.y) - depth;
+      if (dx < -1e-6 && dy < -1e-6) hits.push([a.id, b.id]);
+    }
   return hits;
 }
 
-/* The board is the keycap footprint plus the shell margin, grown to hold the XIAO and battery. */
+/* The board is the shell outline less the wall; the PCB sits 0.5 mm inside the wall. Grown,
+ * if needed, to hold the XIAO and battery. */
 export function boardBounds(design: Design): Bounds {
-  const cap = KEYCAPS[design.keycap];
-  const pts = design.keys.flatMap((k) => corners(k, cap.widthMm, cap.depthMm));
-  const m = design.shell.marginMm;
-  let minX = Math.min(...pts.map((p) => p.x)) - m, maxX = Math.max(...pts.map((p) => p.x)) + m;
-  const minY = Math.min(...pts.map((p) => p.y)) - m, maxY = Math.max(...pts.map((p) => p.y)) + m;
+  const f = keyField(design);
+  let minX = f.minX - SHELL_RULES.margin, maxX = f.maxX + SHELL_RULES.margin;
   const need = Math.max(XIAO.widthMm, design.battery.widthMm) + 2;
   if (maxX - minX < need) { const c = (minX + maxX) / 2; minX = c - need / 2; maxX = c + need / 2; }
-  return { minX, minY, maxX, maxY };
+  return { minX, minY: f.minY - SHELL_RULES.margin, maxX, maxY: f.maxY + SHELL_RULES.chin };
 }
 
 export function xiaoPlacement(bounds: Bounds): Point {
@@ -66,4 +59,11 @@ export function xiaoPlacement(bounds: Bounds): Point {
 export function batteryFits(design: Design, bounds: Bounds): boolean {
   const room = bounds.maxY - bounds.minY - XIAO.lengthMm - 4;
   return design.battery.lengthMm <= room && design.battery.widthMm <= bounds.maxX - bounds.minX - 2;
+}
+
+/* Grid cell of a key, counting from the top-left of the key field (for "column 2, row 5"). */
+export function cellOf(design: Design, key: Key): { col: number; row: number } {
+  const f = keyField(design);
+  const depth = KEYCAPS[design.keycap].depthMm;
+  return { col: Math.round((key.x - capWidth(key.w) / 2 - f.minX) / 18) + 1, row: Math.round((key.y - depth / 2 - f.minY) / 17) + 1 };
 }

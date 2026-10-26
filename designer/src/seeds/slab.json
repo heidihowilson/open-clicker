@@ -1,0 +1,188 @@
+{
+  "schema": 2,
+  "name": "Everyday Slab",
+  "template": "Slab",
+  "chip": "xiao-nrf52840",
+  "keycap": "choc-mcc",
+  "options": {
+    "irTransmit": true,
+    "irReceive": false,
+    "batterySense": true
+  },
+  "battery": {
+    "capacityMah": 500,
+    "lengthMm": 40,
+    "widthMm": 25,
+    "thicknessMm": 6
+  },
+  "keys": [
+    {
+      "id": "power",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "action": "power",
+      "label": ""
+    },
+    {
+      "id": "input",
+      "x": 18,
+      "y": 0,
+      "w": 1,
+      "action": "input",
+      "label": ""
+    },
+    {
+      "id": "mute",
+      "x": 36,
+      "y": 0,
+      "w": 1,
+      "action": "mute",
+      "label": ""
+    },
+    {
+      "id": "back",
+      "x": 0,
+      "y": 17,
+      "w": 1,
+      "action": "back",
+      "label": ""
+    },
+    {
+      "id": "up",
+      "x": 18,
+      "y": 17,
+      "w": 1,
+      "action": "up",
+      "label": ""
+    },
+    {
+      "id": "home",
+      "x": 36,
+      "y": 17,
+      "w": 1,
+      "action": "home",
+      "label": ""
+    },
+    {
+      "id": "left",
+      "x": 0,
+      "y": 34,
+      "w": 1,
+      "action": "left",
+      "label": ""
+    },
+    {
+      "id": "ok",
+      "x": 18,
+      "y": 34,
+      "w": 1,
+      "action": "ok",
+      "label": ""
+    },
+    {
+      "id": "right",
+      "x": 36,
+      "y": 34,
+      "w": 1,
+      "action": "right",
+      "label": ""
+    },
+    {
+      "id": "menu",
+      "x": 0,
+      "y": 51,
+      "w": 1,
+      "action": "menu",
+      "label": ""
+    },
+    {
+      "id": "down",
+      "x": 18,
+      "y": 51,
+      "w": 1,
+      "action": "down",
+      "label": ""
+    },
+    {
+      "id": "guide",
+      "x": 36,
+      "y": 51,
+      "w": 1,
+      "action": "guide",
+      "label": ""
+    },
+    {
+      "id": "vol-up",
+      "x": 0,
+      "y": 68,
+      "w": 1,
+      "action": "volume_up",
+      "label": ""
+    },
+    {
+      "id": "play",
+      "x": 18,
+      "y": 68,
+      "w": 1,
+      "action": "play",
+      "label": ""
+    },
+    {
+      "id": "ch-up",
+      "x": 36,
+      "y": 68,
+      "w": 1,
+      "action": "channel_up",
+      "label": ""
+    },
+    {
+      "id": "vol-down",
+      "x": 0,
+      "y": 85,
+      "w": 1,
+      "action": "volume_down",
+      "label": ""
+    },
+    {
+      "id": "stop",
+      "x": 18,
+      "y": 85,
+      "w": 1,
+      "action": "stop",
+      "label": ""
+    },
+    {
+      "id": "ch-down",
+      "x": 36,
+      "y": 85,
+      "w": 1,
+      "action": "channel_down",
+      "label": ""
+    },
+    {
+      "id": "rewind",
+      "x": 0,
+      "y": 102,
+      "w": 1,
+      "action": "rewind",
+      "label": ""
+    },
+    {
+      "id": "info",
+      "x": 18,
+      "y": 102,
+      "w": 1,
+      "action": "info",
+      "label": ""
+    },
+    {
+      "id": "ff",
+      "x": 36,
+      "y": 102,
+      "w": 1,
+      "action": "fast_forward",
+      "label": ""
+    }
+  ]
+}

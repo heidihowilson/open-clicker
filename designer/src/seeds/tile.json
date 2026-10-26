@@ -1,0 +1,108 @@
+{
+  "schema": 2,
+  "name": "Living room Tile",
+  "template": "Tile",
+  "chip": "xiao-esp32c6",
+  "keycap": "choc-mcc",
+  "options": {
+    "irTransmit": false,
+    "irReceive": false,
+    "batterySense": true
+  },
+  "battery": {
+    "capacityMah": 400,
+    "lengthMm": 30,
+    "widthMm": 20,
+    "thicknessMm": 6
+  },
+  "keys": [
+    {
+      "id": "power",
+      "x": 36,
+      "y": 0,
+      "w": 1,
+      "action": "power",
+      "label": ""
+    },
+    {
+      "id": "up",
+      "x": 18,
+      "y": 17,
+      "w": 1,
+      "action": "up",
+      "label": ""
+    },
+    {
+      "id": "left",
+      "x": 0,
+      "y": 34,
+      "w": 1,
+      "action": "left",
+      "label": ""
+    },
+    {
+      "id": "ok",
+      "x": 18,
+      "y": 34,
+      "w": 1,
+      "action": "ok",
+      "label": ""
+    },
+    {
+      "id": "right",
+      "x": 36,
+      "y": 34,
+      "w": 1,
+      "action": "right",
+      "label": ""
+    },
+    {
+      "id": "down",
+      "x": 18,
+      "y": 51,
+      "w": 1,
+      "action": "down",
+      "label": ""
+    },
+    {
+      "id": "back",
+      "x": 0,
+      "y": 68,
+      "w": 1,
+      "action": "back",
+      "label": ""
+    },
+    {
+      "id": "home",
+      "x": 18,
+      "y": 68,
+      "w": 1,
+      "action": "home",
+      "label": ""
+    },
+    {
+      "id": "menu",
+      "x": 36,
+      "y": 68,
+      "w": 1,
+      "action": "menu",
+      "label": ""
+    },
+    {
+      "id": "vol-down",
+      "x": 0,
+      "y": 85,
+      "w": 1,
+      "action": "volume_down",
+      "label": ""
+    },
+    {
+      "id": "vol-up",
+      "x": 36,
+      "y": 85,
+      "w": 1,
+      "action": "volume_up",
+      "label": ""
+    }
+  ]
+}

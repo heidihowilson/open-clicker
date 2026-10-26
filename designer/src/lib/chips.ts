@@ -26,6 +26,9 @@ export interface Figure {
 export interface Chip {
   id: ChipId;
   label: string;
+  /** Plain-language reason to pick it (Cheapest, All-rounder, Long battery). */
+  category: string;
+  blurb: string;
   priceUsd: number;
   pins: Pin[];
   deepSleepUa: Figure | null;
@@ -55,6 +58,8 @@ export const CHIPS: Record<ChipId, Chip> = {
   "xiao-esp32c3": {
     id: "xiao-esp32c3",
     label: "XIAO ESP32-C3",
+    category: "Cheapest",
+    blurb: "Lowest price and runs today's firmware. Shortest battery life of the three.",
     priceUsd: 5,
     pins: [
       pin("D0", "GPIO2", { wake: true, adc: true, strapping: true }),
@@ -78,6 +83,8 @@ export const CHIPS: Record<ChipId, Chip> = {
   "xiao-esp32c6": {
     id: "xiao-esp32c6",
     label: "XIAO ESP32-C6",
+    category: "All-rounder",
+    blurb: "About the same price, sleeps about three times better, and has a smart-home radio. Runs today's firmware.",
     priceUsd: 5.5,
     pins: [
       pin("D0", "GPIO0", { wake: true, adc: true }),
@@ -101,6 +108,8 @@ export const CHIPS: Record<ChipId, Chip> = {
   "xiao-nrf52840": {
     id: "xiao-nrf52840",
     label: "XIAO nRF52840",
+    category: "Long battery",
+    blurb: "The keyboard chip: months per charge and every pin wakes it. Twice the price; firmware not ported yet.",
     priceUsd: 10,
     pins: [
       pin("D0", "P0.02", { wake: true, adc: true }),

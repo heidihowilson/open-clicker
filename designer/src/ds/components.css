@@ -1,0 +1,91 @@
+/* Open Clicker design system, component styles (MIT). Copied from docs/brand; edit there first. */
+/* Open Clicker — component styles. Every colour, radius and shadow is a token from tokens.css. */
+body { margin: 0; font-family: var(--font-serif); background: var(--ground); color: var(--ink); -webkit-font-smoothing: antialiased; }
+.oc-row { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; padding: var(--space-4); }
+.oc-row-well { background: var(--well); border-radius: var(--radius-lg); }
+.oc-row-tray { background: var(--tray); border-radius: var(--radius-shell); }
+
+/* Key — the keycap. A cap on a 2px hard side; press collapses the side and drops the cap 2px. Colour says what the key does. */
+.oc-key {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  width: 72px; height: 72px; margin-bottom: 2px; padding: 0; border: 0; border-radius: var(--radius-key);
+  background: var(--cap-ivory); color: var(--on-cap-ivory); box-shadow: var(--shadow-cap-ivory);
+  font-family: var(--font-sans); font-size: 14px; line-height: 16px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  cursor: pointer; user-select: none;
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+}
+.oc-key-1_5u { width: 110px; }   /* 1.5 × space-u − space-1 */
+.oc-key-2u { width: 148px; }     /* 2 × space-u − space-1 */
+.oc-key-lg { font-size: 20px; line-height: 24px; font-weight: 700; letter-spacing: 0.04em; }
+.oc-key-dense { width: 40px; height: 40px; font-size: 12px; }
+.oc-key-oxblood { background: var(--cap-oxblood); color: var(--on-cap-oxblood); box-shadow: var(--shadow-cap-oxblood); }
+.oc-key-orange { background: var(--cap-orange); color: var(--on-cap-orange); box-shadow: var(--shadow-cap-orange); }
+.oc-key:active, .oc-key[aria-pressed="true"] { transform: translateY(2px); box-shadow: none; transition-duration: 60ms; }
+.oc-key:disabled { background: var(--well); color: var(--ink-muted); box-shadow: none; border: 1px solid var(--line-strong); cursor: default; }
+.oc-key:focus-visible { outline: none; box-shadow: var(--shadow-cap-ivory), var(--focus-ring); }
+.oc-key-oxblood:focus-visible { box-shadow: var(--shadow-cap-oxblood), var(--focus-ring); }
+.oc-key-orange:focus-visible { box-shadow: var(--shadow-cap-orange), var(--focus-ring); }
+.oc-key[aria-pressed="true"]:focus-visible, .oc-key:active:focus-visible { box-shadow: var(--focus-ring); }
+.oc-key svg { display: block; }
+
+/* Button — keycap-shaped. Ivory by default; the one primary per view is an oxblood cap. */
+.oc-btn {
+  display: inline-flex; align-items: center; gap: var(--space-2); box-sizing: border-box;
+  height: 40px; margin-bottom: 2px; padding: 0 var(--space-4); border: 0; border-radius: var(--radius-key);
+  background: var(--cap-ivory); color: var(--on-cap-ivory); box-shadow: var(--shadow-cap-ivory);
+  font-family: var(--font-serif); font-size: 16px; line-height: 24px; font-weight: 600;
+  cursor: pointer; user-select: none;
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+}
+.oc-btn-primary { background: var(--cap-oxblood); color: var(--on-cap-oxblood); box-shadow: var(--shadow-cap-oxblood); }
+.oc-btn-danger { background: var(--alert-soft); color: var(--alert); box-shadow: 0 2px 0 var(--alert); }
+.oc-btn-link { background: transparent; color: var(--accent-text); box-shadow: none; padding: 0 var(--space-1); text-decoration: underline; text-underline-offset: 3px; }
+.oc-btn:active { transform: translateY(2px); box-shadow: none; transition-duration: 60ms; }
+.oc-btn-link:active { transform: none; }
+.oc-btn:disabled { background: var(--cap-ivory); color: var(--ink-muted); box-shadow: none; border: 1px solid var(--line-strong); cursor: default; }
+.oc-btn:focus-visible { outline: none; box-shadow: var(--shadow-cap-ivory), var(--focus-ring); }
+.oc-btn-primary:focus-visible { box-shadow: var(--shadow-cap-oxblood), var(--focus-ring); }
+.oc-btn-link:focus-visible { box-shadow: var(--focus-ring); border-radius: var(--radius-xs); }
+
+/* Badge — one or two words. Status always has a word; colour never stands alone. */
+.oc-badge {
+  display: inline-flex; align-items: center; gap: var(--space-1); height: 20px; padding: 0 var(--space-2);
+  border-radius: var(--radius-xs); background: var(--well); color: var(--ink);
+  font-family: var(--font-sans); font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap;
+}
+.oc-badge-ok { background: var(--ok-soft); color: var(--ok); }
+.oc-badge-alert { background: var(--alert-soft); color: var(--alert); }
+.oc-badge-accent { background: var(--accent-soft); color: var(--accent-text); }
+.oc-badge-mono { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.04em; }
+
+/* Segmented — a row of keys in a well; the chosen one is pressed. */
+.oc-seg { display: inline-flex; gap: var(--space-1); padding: var(--space-1) var(--space-1) 6px; /* space-1 + the 2px side */ background: var(--well); border-radius: var(--radius-sm); }
+.oc-seg-opt {
+  height: 32px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-key);
+  background: var(--cap-ivory); color: var(--on-cap-ivory); box-shadow: var(--shadow-cap-ivory);
+  font-family: var(--font-serif); font-size: 14px; line-height: 20px; font-weight: 600; cursor: pointer;
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out, background 120ms ease-out, color 120ms ease-out;
+}
+.oc-seg-opt[aria-checked="true"] { transform: translateY(2px); box-shadow: none; background: var(--accent-soft); color: var(--accent-text); transition-duration: 60ms; }
+.oc-seg-opt:disabled { color: var(--ink-muted); box-shadow: none; background: transparent; cursor: default; }
+.oc-seg-opt:focus-visible { outline: none; box-shadow: var(--shadow-cap-ivory), var(--focus-ring); }
+.oc-seg-opt[aria-checked="true"]:focus-visible { box-shadow: var(--focus-ring); }
+
+/* Field — a labelled well holding a real value in mono. */
+.oc-field { display: flex; flex-direction: column; gap: var(--space-1); min-width: 180px; }
+.oc-field-label { font-family: var(--font-sans); font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); }
+.oc-field-well {
+  display: flex; align-items: center; box-sizing: border-box; height: 36px; padding: 0 var(--space-3);
+  background: var(--well); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  font-family: var(--font-sans); font-size: 14px; line-height: 20px; font-weight: 500; color: var(--ink);
+}
+.oc-field-sans { font-family: var(--font-serif); font-size: 16px; font-weight: 400; }
+.oc-field-well input { flex: 1; min-width: 0; border: 0; padding: 0; background: transparent; font: inherit; color: inherit; outline: none; }
+.oc-field-well:focus-within { box-shadow: var(--focus-ring); }
+.oc-field-unit { color: var(--ink-muted); margin-left: var(--space-2); }
+.oc-field-readonly .oc-field-well { border-style: dashed; color: var(--ink-muted); }
+.oc-field-alert .oc-field-well { border-color: var(--alert); }
+.oc-field-help { font-family: var(--font-serif); font-size: 14px; line-height: 20px; color: var(--ink-muted); }
+.oc-field-alert .oc-field-help { color: var(--alert); }
+
+@media (prefers-reduced-motion: reduce) { .oc-key, .oc-btn, .oc-seg-opt { transition: none; } }

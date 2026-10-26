@@ -1,57 +1,67 @@
 <script lang="ts">
-  import classicSeed from "./seeds/classic.json";
-  import arcSeed from "./seeds/thumb-arc.json";
-  import Editor2D from "./Editor2D.svelte";
+  import columnSeed from "./seeds/column.json";
+  import deckSeed from "./seeds/deck.json";
+  import slabSeed from "./seeds/slab.json";
+  import tileSeed from "./seeds/tile.json";
+  import Editor2D, { type Tool } from "./Editor2D.svelte";
   import Preview3D from "./Preview3D.svelte";
+  import { ACTION_INFO, ACTIONS, capColour, glyphUrl, legendOf } from "./lib/actions";
+  import { shellGrams, usd } from "./lib/bom";
   import { CHIPS, CHIP_IDS } from "./lib/chips";
-  import { check } from "./lib/checks";
-  import { ACTIONS, DesignSchema, SHELLS, parseDesign, type Design } from "./lib/design";
+  import { check, errorsIn } from "./lib/checks";
+  import { DesignSchema, parseDesign, type Design, type Key } from "./lib/design";
   import { keymap, keymapHeader } from "./lib/exports";
+  import { cellOf } from "./lib/geometry";
   import { planPins } from "./lib/matrix";
-  import { usd } from "./lib/bom";
   import { DEFAULT_PRICING, tiers, type Tier } from "./lib/pricing";
 
-  const SEEDS: Record<string, Design> = { classic: parseDesign(classicSeed), "thumb-arc": parseDesign(arcSeed) };
-  const STORE = "open-remote-designer:v1";
+  const TEMPLATES: Record<string, Design> = {
+    Tile: parseDesign(tileSeed), Slab: parseDesign(slabSeed), Deck: parseDesign(deckSeed), Column: parseDesign(columnSeed),
+  };
+  const STORE = "open-clicker:layout:v2";
+  const THEME = "open-clicker:theme";
 
   function restore(): Design {
     try {
       const saved = localStorage.getItem(STORE);
       if (saved) return DesignSchema.parse(JSON.parse(saved));
     } catch { localStorage.removeItem(STORE); }
-    return structuredClone(SEEDS.classic!);
+    return structuredClone(TEMPLATES.Tile!);
   }
 
   let design = $state<Design>(restore());
   let selected = $state<string | null>(null);
+  let tool = $state<Tool>("select");
+  let mode = $state<"2d" | "3d">("2d");
+  let level = $state<Tier["id"]>("assembled");
+  let assumptions = $state({ ...DEFAULT_PRICING });
+  let theme = $state(localStorage.getItem(THEME) === "late-show" ? "late-show" : "ivory");
+  let exportOpen = $state(false);
   let notice = $state("");
-  let tab = $state<"layout" | "model" | "build" | "checks">("model");
-  const today = new Date().toISOString().slice(0, 10);
 
   const findings = $derived(check(design));
+  const errors = $derived(errorsIn(findings));
+  const alertKeys = $derived(new Set(findings.filter((f) => f.level === "error" && f.keyId).map((f) => f.keyId!)));
   const plan = $derived(planPins(design));
   const chip = $derived(CHIPS[design.chip]);
   const key = $derived(design.keys.find((k) => k.id === selected) ?? null);
-  const errors = $derived(findings.filter((f) => f.level === "error").length);
-  let assumptions = $state({ ...DEFAULT_PRICING });
-  let tierId = $state<Tier["id"]>("assembled");
   const options = $derived(tiers(design, assumptions));
-  const tier = $derived(options.find((t) => t.id === tierId) ?? options[0]!);
-  const headline = (t: Tier) => t.priceUsd ?? t.costUsd;
+  const tier = $derived(options.find((t) => t.id === level) ?? options[0]!);
+  const grams = $derived.by(() => { const g = shellGrams(design); return g.shell + g.plate + g.lid; });
+  const price = (t: Tier) => t.priceUsd ?? t.costUsd;
+  const protocol = $derived(design.options.irTransmit ? "BT + IR" : "BT");
+  const ordered = $derived([...design.keys].sort((a, b) => a.y - b.y || a.x - b.x));
 
   $effect(() => { localStorage.setItem(STORE, JSON.stringify($state.snapshot(design))); });
+  $effect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem(THEME, theme); });
 
-  function load(name: string) { design = structuredClone(SEEDS[name]!); selected = null; }
-  function addKey() {
-    let n = design.keys.length + 1;
-    while (design.keys.some((k) => k.id === `key-${n}`)) n++;
-    const lowest = Math.max(...design.keys.map((k) => k.y));
-    design.keys.push({ id: `key-${n}`, x: 0, y: lowest + 19, r: 0, action: "none", label: "" });
-    selected = `key-${n}`;
-  }
-  function removeKey() {
-    if (!selected || design.keys.length <= 1) return;
-    design.keys = design.keys.filter((k) => k.id !== selected);
+  const HELP: Record<Tier["id"], string> = { kit: "You solder.", "half-built": "We solder, you print.", assembled: "You click." };
+
+  function useTemplate(name: string) { design = structuredClone(TEMPLATES[name]!); selected = null; }
+  function setTool(t: Tool) { tool = t; mode = "2d"; }
+  function removeKey(k: Key) {
+    if (design.keys.length <= 1) return;
+    design.keys = design.keys.filter((x) => x.id !== k.id);
     selected = null;
   }
   function download(name: string, text: string, type: string) {
@@ -59,244 +69,292 @@
     a.href = URL.createObjectURL(new Blob([text], { type }));
     a.download = name; a.click(); URL.revokeObjectURL(a.href);
   }
-  function exportFile(kind: "design" | "keymap" | "header") {
+  function exportFile(kind: "layout" | "keymap" | "header") {
     const slug = design.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     try {
-      if (kind === "design") download(`${slug}.design.json`, JSON.stringify($state.snapshot(design), null, 2), "application/json");
+      if (kind === "layout") download(`${slug}.layout.json`, JSON.stringify($state.snapshot(design), null, 2), "application/json");
       if (kind === "keymap") download(`${slug}.keymap.json`, JSON.stringify(keymap(design), null, 2), "application/json");
       if (kind === "header") download("keymap.h", keymapHeader(design), "text/x-c");
       notice = "";
+      exportOpen = false;
     } catch (e) { notice = e instanceof Error ? e.message : String(e); }
   }
   async function importFile(event: Event) {
     const file = (event.currentTarget as HTMLInputElement).files?.[0];
     if (!file) return;
     const parsed = DesignSchema.safeParse(JSON.parse(await file.text()));
-    if (parsed.success) { design = parsed.data; selected = null; notice = ""; }
-    else notice = `Not a valid design file: ${parsed.error.issues[0]?.message ?? "unknown error"}`;
+    if (parsed.success) { design = parsed.data; selected = null; notice = ""; exportOpen = false; }
+    else notice = `That file is not a layout: ${parsed.error.issues[0]?.message ?? "unknown error"}.`;
   }
 </script>
 
-<div class="app" data-tab={tab}>
-  <header class="titleblock">
-    <div class="cell brand"><small>PROJECT</small><b>OPEN REMOTE DESIGNER</b></div>
-    <div class="cell"><small>DRAWING</small><input class="title" bind:value={design.name} maxlength="60" aria-label="Design name" /></div>
-    <div class="cell meta"><small>CONTROLLER</small><b>{chip.label}</b></div>
-    <div class="cell meta"><small>UNITS · DATE</small><b>MM · {today}</b></div>
-    <div class="cell cost"><small>EST. {tier.id === "diy" ? "DIY COST" : tier.id === "kit" ? "KIT PRICE" : "BUILT PRICE"}</small><b>{usd(headline(tier))}</b></div>
-    <div class="cell state" class:bad={errors > 0}><small>STATUS</small><b>{errors ? `${errors} ISSUE${errors > 1 ? "S" : ""}` : "BUILDABLE"}</b></div>
+<div class="tool">
+  <header class="topbar">
+    <img class="mark" src="logo/oc-monogram.svg" alt="Open Clicker" width="54" height="36" />
+    <input class="name" bind:value={design.name} maxlength="60" aria-label="Layout name" />
+    <div class="oc-seg level" role="radiogroup" aria-label="Fulfilment">
+      {#each options as t (t.id)}
+        <button class="oc-seg-opt" role="radio" aria-checked={t.id === level} title={HELP[t.id]} onclick={() => (level = t.id)}>{t.title}</button>
+      {/each}
+    </div>
+    <span class="oc-badge oc-badge-mono">{protocol}</span>
+    <button class="oc-btn theme" onclick={() => (theme = theme === "ivory" ? "late-show" : "ivory")}>{theme === "ivory" ? "Late show" : "Ivory"}</button>
+    <div class="export">
+      <button class="oc-btn oc-btn-primary" aria-expanded={exportOpen} onclick={() => (exportOpen = !exportOpen)}>Export</button>
+      {#if exportOpen}
+        <div class="menu" role="menu">
+          <button class="oc-btn" role="menuitem" onclick={() => exportFile("layout")}>Layout file</button>
+          <button class="oc-btn" role="menuitem" disabled={!!errors.length} title={errors[0]?.message} onclick={() => exportFile("keymap")}>Keymap</button>
+          <button class="oc-btn" role="menuitem" disabled={!!errors.length || chip.firmware !== "esp-idf"} title={errors[0]?.message ?? (chip.firmware !== "esp-idf" ? "No firmware for this controller yet." : "")} onclick={() => exportFile("header")}>Firmware keymap.h</button>
+          <label class="oc-btn">Open a layout<input type="file" accept="application/json,.json" onchange={importFile} hidden /></label>
+          <p class="small">The PCB and the three STL files come next.</p>
+          {#if notice}<p class="small alert">{notice}</p>{/if}
+        </div>
+      {/if}
+    </div>
   </header>
 
-  <nav class="tabs" aria-label="Sections">
-    {#each [["layout", "LAYOUT"], ["model", "3D"], ["build", "BUILD"], ["checks", `PARTS${errors ? ` · ${errors}!` : ""}`]] as [id, label]}
-      <button class:on={tab === id} onclick={() => (tab = id as typeof tab)}>{label}</button>
+  <nav class="rail oc-row-well" aria-label="Tools">
+    {#each [["select", "Select"], ["move", "Move"], ["add", "Add key"], ["measure", "Measure"]] as const as [t, name]}
+      <button class="oc-key oc-key-dense" aria-pressed={mode === "2d" && tool === t} aria-label={name} title={name} onclick={() => setTool(t)}>
+        <img src={glyphUrl(t === "move" ? "move" : t === "add" ? "add" : t, "oxblood")} alt="" width="20" height="20" />
+      </button>
     {/each}
+    <button class="oc-key oc-key-dense" aria-pressed={mode === "3d"} aria-label="3D view" title="3D view" onclick={() => (mode = "3d")}>
+      <img src={glyphUrl("camera", "oxblood")} alt="" width="20" height="20" />
+    </button>
   </nav>
 
-  <main>
-    <aside class="pane p-build">
+  <main class="viewport">
+    <div class="modes oc-seg" role="radiogroup" aria-label="View">
+      <button class="oc-seg-opt" role="radio" aria-checked={mode === "2d"} onclick={() => (mode = "2d")}>2D</button>
+      <button class="oc-seg-opt" role="radio" aria-checked={mode === "3d"} onclick={() => (mode = "3d")}>3D</button>
+    </div>
+    {#if mode === "2d"}
+      <Editor2D bind:design bind:selected {tool} {alertKeys} />
+    {:else}
+      <Preview3D {design} {theme} />
+    {/if}
+  </main>
+
+  <aside class="props">
+    {#if key}
+      {@const cell = cellOf(design, key)}
+      <h1>{ACTION_INFO[key.action].name}</h1>
+      <p class="meta">key {ordered.indexOf(key) + 1} of {design.keys.length} · column {cell.col}, row {cell.row} · {capColour(key.action)}</p>
+      <label class="oc-field">
+        <span class="oc-field-label">Does</span>
+        <span class="oc-field-well oc-field-sans"><select bind:value={key.action}>{#each ACTIONS as a}<option value={a}>{ACTION_INFO[a].name}</option>{/each}</select></span>
+        <span class="oc-field-help">The cap colour follows from this.{ACTION_INFO[key.action].firmware ? "" : " The firmware does not send it yet."}</span>
+      </label>
+      <label class="oc-field">
+        <span class="oc-field-label">Legend</span>
+        <span class="oc-field-well"><input bind:value={key.label} maxlength="4" placeholder={legendOf(key.action, "").glyph ? `${legendOf(key.action, "").glyph} (glyph)` : legendOf(key.action, "").text} /></span>
+        <span class="oc-field-help">A glyph from the set, or four characters.</span>
+      </label>
+      <div class="oc-seg size" role="radiogroup" aria-label="Key size">
+        {#each [1, 1.5, 2] as const as w}
+          <button class="oc-seg-opt" role="radio" aria-checked={key.w === w} onclick={() => (key.w = w)}>{w}u</button>
+        {/each}
+      </div>
+      <div class="oc-field oc-field-readonly"><span class="oc-field-label">Switch</span><span class="oc-field-well oc-field-sans">Kailh Choc V1</span><span class="oc-field-help">Set for the whole layout.</span></div>
+      <div class="oc-field oc-field-readonly"><span class="oc-field-label">Pitch</span><span class="oc-field-well">18 × 17<span class="oc-field-unit">mm</span></span></div>
+      <div class="oc-field oc-field-readonly"><span class="oc-field-label">Wall here</span><span class="oc-field-well">2.0<span class="oc-field-unit">mm</span></span></div>
+      <div class="row">
+        <button class="oc-btn" onclick={() => (selected = null)}>Done</button>
+        <button class="oc-btn oc-btn-danger" onclick={() => removeKey(key)}>Remove key</button>
+      </div>
+    {:else}
+      <h1>{design.template || "Layout"}</h1>
+      <p class="meta">{design.keys.length} keys · {chip.category.toLowerCase()} controller · {protocol}</p>
+
       <section>
-        <h2>01 · Start</h2>
-        <label>Seed design <select onchange={(e) => load(e.currentTarget.value)}>
-          <option value="" selected disabled>Choose…</option>
-          <option value="classic">Classic column</option>
-          <option value="thumb-arc">Thumb arc</option>
-        </select></label>
-      </section>
-      <section>
-        <h2>02 · Controller</h2>
-        <select bind:value={design.chip} aria-label="Controller">
-          {#each CHIP_IDS as id}<option value={id}>{CHIPS[id].label} · ${CHIPS[id].priceUsd}</option>{/each}
-        </select>
-        <p class="note">{chip.firmware === "esp-idf" ? "Firmware: ready." : "Firmware: not ported."} Wake pins {chip.pins.filter((p) => p.wake).map((p) => p.id).join(" ")}</p>
-        <label class="check"><input type="checkbox" bind:checked={design.options.irTransmit} /> IR transmitter</label>
-        <label class="check"><input type="checkbox" bind:checked={design.options.irReceive} /> IR receiver</label>
-        <label class="check"><input type="checkbox" bind:checked={design.options.batterySense} /> Battery level</label>
-      </section>
-      <section>
-        <h2>03 · Battery · shell</h2>
-        <div class="grid">
-          <label>mAh <input type="number" min="50" max="3000" bind:value={design.battery.capacityMah} /></label>
-          <label>T mm <input type="number" min="2" max="15" step="0.5" bind:value={design.battery.thicknessMm} /></label>
-          <label>L mm <input type="number" min="10" max="120" bind:value={design.battery.lengthMm} /></label>
-          <label>W mm <input type="number" min="5" max="60" bind:value={design.battery.widthMm} /></label>
-          <label>Shell <select bind:value={design.shell.family}>{#each SHELLS as s}<option>{s}</option>{/each}</select></label>
-          <label>Margin <input type="number" min="2" max="20" step="0.5" bind:value={design.shell.marginMm} /></label>
+        <h2>Start from</h2>
+        <div class="oc-seg" role="radiogroup" aria-label="Template">
+          {#each Object.keys(TEMPLATES) as name}
+            <button class="oc-seg-opt" role="radio" aria-checked={design.template === name} onclick={() => useTemplate(name)}>{name}</button>
+          {/each}
         </div>
-        <label>Keycaps <select bind:value={design.keycap}><option value="choc-mcc">Choc · MoErgo MCC</option><option value="choc-mbk">Choc · MBK</option></select></label>
       </section>
-      <section>
-        <h2>04 · Keys [{design.keys.length}]</h2>
-        <div class="row"><button onclick={addKey}>+ Add</button><button onclick={removeKey} disabled={!key}>− Remove</button></div>
-        {#if key}
-          <div class="grid">
-            <label>Action <select bind:value={key.action}>{#each ACTIONS as a}<option>{a}</option>{/each}</select></label>
-            <label>Legend <input bind:value={key.label} maxlength="12" /></label>
-            <label>X <input type="number" step="0.5" bind:value={key.x} /></label>
-            <label>Y <input type="number" step="0.5" bind:value={key.y} /></label>
-            <label>R° <input type="number" step="1" min="-180" max="180" bind:value={key.r} /></label>
-          </div>
-        {:else}
-          <p class="note">Drag keys on the layout sheet. Select one to edit; arrows nudge (Shift = 5 mm), R / E rotate.</p>
-        {/if}
-      </section>
-    </aside>
 
-    <div class="pane p-layout"><Editor2D bind:design bind:selected /></div>
-    <div class="pane p-model"><Preview3D {design} /></div>
-
-    <aside class="pane p-checks">
       <section>
-        <h2>05 · Pricing</h2>
-        <div class="tiers" role="tablist" aria-label="Pricing option">
-          {#each options as t, i (t.id)}
-            <button role="tab" aria-selected={t.id === tierId} class:on={t.id === tierId} onclick={() => (tierId = t.id)}>
-              <small>{i + 1}</small><span>{t.id === "diy" ? "DIY" : t.id === "kit" ? "KIT" : "BUILT"}</span><b>{usd(headline(t))}</b>
+        <h2>Controller</h2>
+        <div class="choices">
+          {#each CHIP_IDS as id}
+            {@const c = CHIPS[id]}
+            <button class="choice" aria-pressed={design.chip === id} onclick={() => (design.chip = id)}>
+              <b>{c.category}</b><span class="spec">{c.label} · {usd(c.priceUsd)}</span><span>{c.blurb}</span>
             </button>
           {/each}
         </div>
-        <h3>{tier.title}</h3>
-        <p class="note">{tier.summary}<br />You: {tier.youDo}</p>
+      </section>
+
+      <section>
+        <h2>Talks to the TV over</h2>
+        <div class="oc-seg" role="radiogroup" aria-label="Protocol">
+          <button class="oc-seg-opt" role="radio" aria-checked={!design.options.irTransmit} onclick={() => (design.options.irTransmit = false)}>Bluetooth</button>
+          <button class="oc-seg-opt" role="radio" aria-checked={design.options.irTransmit} onclick={() => (design.options.irTransmit = true)}>BT + IR</button>
+        </div>
+        <p class="small">IR needs line of sight. It adds a 6 × 2 mm window on the top edge.</p>
+        <div class="oc-seg" role="radiogroup" aria-label="Learn from an old remote">
+          <button class="oc-seg-opt" role="radio" aria-checked={!design.options.irReceive} onclick={() => (design.options.irReceive = false)}>No IR receiver</button>
+          <button class="oc-seg-opt" role="radio" aria-checked={design.options.irReceive} onclick={() => (design.options.irReceive = true)}>Learns IR</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Battery</h2>
+        <div class="grid">
+          <label class="oc-field"><span class="oc-field-label">Capacity</span><span class="oc-field-well"><input type="number" min="50" max="3000" bind:value={design.battery.capacityMah} /><span class="oc-field-unit">mAh</span></span></label>
+          <label class="oc-field"><span class="oc-field-label">Thick</span><span class="oc-field-well"><input type="number" min="2" max="15" step="0.5" bind:value={design.battery.thicknessMm} /><span class="oc-field-unit">mm</span></span></label>
+          <label class="oc-field"><span class="oc-field-label">Long</span><span class="oc-field-well"><input type="number" min="10" max="120" bind:value={design.battery.lengthMm} /><span class="oc-field-unit">mm</span></span></label>
+          <label class="oc-field"><span class="oc-field-label">Wide</span><span class="oc-field-well"><input type="number" min="5" max="60" bind:value={design.battery.widthMm} /><span class="oc-field-unit">mm</span></span></label>
+        </div>
+        <div class="oc-seg" role="radiogroup" aria-label="Battery level">
+          <button class="oc-seg-opt" role="radio" aria-checked={design.options.batterySense} onclick={() => (design.options.batterySense = true)}>Reports battery level</button>
+          <button class="oc-seg-opt" role="radio" aria-checked={!design.options.batterySense} onclick={() => (design.options.batterySense = false)}>Doesn't</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Keycaps</h2>
+        <div class="oc-seg" role="radiogroup" aria-label="Keycaps">
+          <button class="oc-seg-opt" role="radio" aria-checked={design.keycap === "choc-mcc"} onclick={() => (design.keycap = "choc-mcc")}>MoErgo MCC</button>
+          <button class="oc-seg-opt" role="radio" aria-checked={design.keycap === "choc-mbk"} onclick={() => (design.keycap = "choc-mbk")}>MBK</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>{tier.title} · {usd(price(tier))}</h2>
+        <p class="small">{tier.summary} {HELP[tier.id]}</p>
         <table class="bom">
-          <thead><tr><th>ITEM</th><th class="n">QTY</th><th class="n">EA</th><th class="n">LINE</th></tr></thead>
           <tbody>
             {#each tier.lines as line}
-              <tr title={line.basis}>
-                <td><b>{line.label}</b><small>{line.basis}</small></td>
-                <td class="n">{line.qty}</td><td class="n">{usd(line.unitUsd)}</td><td class="n">{usd(line.qty * line.unitUsd)}</td>
-              </tr>
+              <tr title={line.basis}><td>{line.label}<small>{line.basis}</small></td><td class="n">{line.qty} × {usd(line.unitUsd)}</td><td class="n">{usd(line.qty * line.unitUsd)}</td></tr>
             {/each}
           </tbody>
           <tfoot>
             {#if tier.priceUsd === null}
-              <tr><td colspan="3">YOU PAY, PER REMOTE</td><td class="n">{usd(tier.costUsd)}</td></tr>
+              <tr><td colspan="2">You pay, per remote</td><td class="n">{usd(tier.costUsd)}</td></tr>
             {:else}
-              <tr class="muted"><td colspan="3">OUR COST</td><td class="n">{usd(tier.costUsd)}</td></tr>
-              <tr><td colspan="3">PRICE AT {Math.round(assumptions.margin * 100)}% MARGIN</td><td class="n">{usd(tier.priceUsd)}</td></tr>
+              <tr class="muted"><td colspan="2">Our cost</td><td class="n">{usd(tier.costUsd)}</td></tr>
+              <tr><td colspan="2">Price at {Math.round(assumptions.margin * 100)}% margin</td><td class="n">{usd(tier.priceUsd)}</td></tr>
             {/if}
-            {#if tier.extraUsd > 0}<tr class="muted"><td colspan="3">{tier.extraNote}</td><td class="n">{usd(tier.extraUsd)}</td></tr>{/if}
+            {#if tier.extraUsd > 0}<tr class="muted"><td colspan="2">{tier.extraNote}</td><td class="n">{usd(tier.extraUsd)}</td></tr>{/if}
           </tfoot>
         </table>
         {#if tier.priceUsd !== null}
-          <div class="grid assumptions">
-            <label>Batch <input type="number" min="5" max="5000" step="5" bind:value={assumptions.batch} /></label>
-            <label>Margin % <input type="number" min="0" max="90" step="5" value={Math.round(assumptions.margin * 100)}
-              oninput={(e) => (assumptions.margin = Math.min(0.9, Math.max(0, Number(e.currentTarget.value) / 100)))} /></label>
-            <label>Labor $/h <input type="number" min="0" max="200" step="5" bind:value={assumptions.laborUsdPerHour} /></label>
+          <div class="grid three">
+            <label class="oc-field"><span class="oc-field-label">Batch</span><span class="oc-field-well"><input type="number" min="5" max="5000" step="5" bind:value={assumptions.batch} /></span></label>
+            <label class="oc-field"><span class="oc-field-label">Margin</span><span class="oc-field-well"><input type="number" min="0" max="90" step="5" value={Math.round(assumptions.margin * 100)}
+              oninput={(e) => (assumptions.margin = Math.min(0.9, Math.max(0, Number(e.currentTarget.value) / 100)))} /><span class="oc-field-unit">%</span></span></label>
+            <label class="oc-field"><span class="oc-field-label">Labour</span><span class="oc-field-well"><input type="number" min="0" max="200" step="5" bind:value={assumptions.laborUsdPerHour} /><span class="oc-field-unit">$/h</span></span></label>
           </div>
         {/if}
-        <p class="note">Estimates before shipping and tax. Hover a line for its basis. The no-solder kit uses hot-swap sockets, which the 3D model does not show yet.</p>
+        <p class="small">Estimates before shipping and tax. Hover a line for where its number comes from.</p>
       </section>
+
       <section>
-        <h2>06 · Checks</h2>
-        <ul class="findings">{#each findings as f}<li class={f.level}><i>{f.level === "error" ? "ERR" : f.level === "warning" ? "WARN" : "OK"}</i>{f.message}</li>{/each}</ul>
+        <h2>Checks</h2>
+        <ul class="checks">
+          {#each findings as f}<li><span class="oc-badge" class:oc-badge-alert={f.level === "error"} class:oc-badge-ok={f.level === "info"} class:oc-badge-accent={f.level === "warning"}>{f.badge}</span> {f.message}</li>{/each}
+        </ul>
       </section>
-      <section>
-        <h2>07 · Pin plan</h2>
-        {#if plan.ok}
-          <table>
-            <tbody>
-              <tr><th>COL</th><td>{plan.columns.map((p) => `${p.id}/${p.chipPin}`).join("  ")}</td></tr>
-              <tr><th>ROW</th><td>{plan.rows.map((p) => `${p.id}/${p.chipPin}`).join("  ")}</td></tr>
-              {#if plan.battery}<tr><th>BAT</th><td>{plan.battery.id}/{plan.battery.chipPin}</td></tr>{/if}
-              {#if plan.irTransmit}<tr><th>IR TX</th><td>{plan.irTransmit.id}/{plan.irTransmit.chipPin}</td></tr>{/if}
-              {#if plan.irReceive}<tr><th>IR RX</th><td>{plan.irReceive.id}/{plan.irReceive.chipPin}</td></tr>{/if}
-            </tbody>
-          </table>
-        {:else}<p class="note">No plan — see checks.</p>{/if}
-      </section>
-      <section>
-        <h2>08 · Export</h2>
-        <div class="col">
-          <button onclick={() => exportFile("design")}>Design file · JSON</button>
-          <button onclick={() => exportFile("keymap")} disabled={!plan.ok}>Keymap · JSON</button>
-          <button onclick={() => exportFile("header")} disabled={!plan.ok || chip.firmware !== "esp-idf"}>Firmware · keymap.h</button>
-          <label class="button">Import design<input type="file" accept="application/json,.json" onchange={importFile} hidden /></label>
-        </div>
-        {#if notice}<p class="note bad">{notice}</p>{/if}
-        <p class="note">PCB, plate and shell files come next. Models use published footprints; heights are approximate until measured.</p>
-      </section>
-    </aside>
-  </main>
+
+      {#if plan.ok}
+        <section>
+          <h2>Pins</h2>
+          <dl class="pins">
+            <dt>Columns</dt><dd>{plan.columns.map((p) => `${p.id} (${p.chipPin})`).join(", ")}</dd>
+            <dt>Rows</dt><dd>{plan.rows.map((p) => `${p.id} (${p.chipPin})`).join(", ")}</dd>
+            {#if plan.battery}<dt>Battery</dt><dd>{plan.battery.id} ({plan.battery.chipPin})</dd>{/if}
+            {#if plan.irTransmit}<dt>IR out</dt><dd>{plan.irTransmit.id} ({plan.irTransmit.chipPin})</dd>{/if}
+            {#if plan.irReceive}<dt>IR in</dt><dd>{plan.irReceive.id} ({plan.irReceive.chipPin})</dd>{/if}
+          </dl>
+        </section>
+      {/if}
+    {/if}
+  </aside>
+
+  <footer class="status">
+    <div class="badges">
+      {#each errors as f}<span class="oc-badge oc-badge-alert" title={f.message}>{f.badge}</span>{/each}
+      {#if !errors.length}
+        {#each findings.filter((f) => f.badge === "Prints without supports" || f.badge === "Routed") as f}<span class="oc-badge oc-badge-ok" title={f.message}>{f.badge}</span>{/each}
+        <span class="oc-badge oc-badge-ok">Ready to export</span>
+      {/if}
+    </div>
+    <span class="summary">{design.template || "Layout"} · {design.keys.length} keys · {Math.round(grams)} g est. · {tier.title} {usd(price(tier))}</span>
+  </footer>
 </div>
 
 <style>
-  :global(:root) {
-    --paper: #0b2545; --ink: #d6e8ff; --line: #9cc8ff; --faint: #2f5a8c; --rule: #3d6ea8; --accent: #7fd1ff;
-    --copper: #ffd27a; --warn: #ffcf6b; --error: #ff7a7a;
-    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-  }
-  :global(body) { margin: 0; background: var(--paper); color: var(--ink); font: 12px/1.45 var(--mono); }
+  :global(html), :global(body) { height: 100%; }
+  :global(body) { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--font-serif); font-variation-settings: "SOFT" 100, "WONK" 1; }
   :global(*) { box-sizing: border-box; }
-  :global(button), :global(.button), :global(input), :global(select) {
-    font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--rule); border-radius: 0; padding: 6px 8px;
-  }
-  :global(button), :global(.button) { cursor: pointer; text-transform: uppercase; letter-spacing: 1px; font-size: 11px; }
-  :global(button:hover), :global(.button:hover) { border-color: var(--accent); color: var(--accent); }
-  :global(button.on), :global(button.primary.on) { background: var(--accent); color: var(--paper); border-color: var(--accent); }
-  :global(button:disabled) { opacity: .4; cursor: default; }
-  :global(select option) { background: var(--paper); }
+  .tool { display: grid; height: 100dvh; grid-template-columns: 72px 1fr 340px; grid-template-rows: 56px 1fr 32px;
+    grid-template-areas: "top top top" "rail view props" "status status status"; }
+  .topbar { grid-area: top; display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-4); background: var(--ground-raised); border-bottom: 1px solid var(--line); }
+  .mark { height: 32px; width: auto; }
+  .name { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); font: 700 24px/32px var(--font-serif); font-variation-settings: "SOFT" 100, "WONK" 1; padding: 0; outline: none; }
+  .name:focus-visible { box-shadow: var(--focus-ring); border-radius: var(--radius-xs); }
+  .export { position: relative; }
+  .menu { position: absolute; right: 0; top: 48px; z-index: 10; width: 240px; display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3);
+    background: var(--ground-raised); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-float); }
+  .menu .oc-btn { justify-content: flex-start; }
+  .rail { grid-area: rail; display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-2); padding: var(--space-2); align-items: center; align-self: start; border-radius: var(--radius-md); }
+  .rail img { display: block; pointer-events: none; }
+  .viewport { grid-area: view; position: relative; min-width: 0; min-height: 0; border-left: 1px solid var(--line); }
+  .modes { position: absolute; left: var(--space-3); top: var(--space-3); z-index: 5; }
+  .props { grid-area: props; overflow: auto; background: var(--ground-raised); border-left: 1px solid var(--line); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
+  h1 { margin: 0; font: 700 36px/40px var(--font-serif); font-variation-settings: "SOFT" 100, "WONK" 1; }
+  h2 { margin: 0 0 var(--space-2); font: 600 12px/16px var(--font-sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); }
+  .meta { margin: calc(-1 * var(--space-3)) 0 0; font-size: 15px; color: var(--ink-muted); }
+  section { display: flex; flex-direction: column; gap: var(--space-2); border-top: 1px solid var(--line); padding-top: var(--space-3); }
+  .oc-field { min-width: 0; }
+  .oc-field-well select { flex: 1; border: 0; background: transparent; font: inherit; color: inherit; outline: none; }
+  .oc-seg { flex-wrap: wrap; }
+  .size { align-self: flex-start; }
+  .row { display: flex; gap: var(--space-2); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+  .grid.three { grid-template-columns: repeat(3, 1fr); }
+  .small { margin: 0; font-size: 14px; line-height: 20px; color: var(--ink-muted); }
+  .small.alert { color: var(--alert); }
+  .choices { display: flex; flex-direction: column; gap: var(--space-2); }
+  .choice { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius-key);
+    background: var(--cap-ivory); color: var(--on-cap-ivory); box-shadow: var(--shadow-cap-ivory); font: 400 14px/20px var(--font-serif); cursor: pointer;
+    transition: transform 120ms ease-out, box-shadow 120ms ease-out; }
+  .choice b { font: 700 17px/22px var(--font-serif); }
+  .choice .spec { font: 600 12px/16px var(--font-sans); letter-spacing: 0.04em; opacity: 0.75; }
+  /* Pressed like a key, with the selection outline; the cap keeps its colour so text stays legible in both themes. */
+  .choice[aria-pressed="true"] { transform: translateY(2px); box-shadow: inset 0 0 0 2px var(--selection); }
+  .choice:focus-visible { outline: none; box-shadow: var(--shadow-cap-ivory), var(--focus-ring); }
+  .bom { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .bom td { padding: 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .bom td small { display: block; font: 500 12px/16px var(--font-sans); color: var(--ink-muted); }
+  .bom .n { text-align: right; white-space: nowrap; padding-left: var(--space-2); font: 500 14px/20px var(--font-sans); }
+  .bom tfoot td { font-weight: 700; border-bottom: none; }
+  .bom tfoot .muted td { font-weight: 400; color: var(--ink-muted); }
+  .checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); font-size: 14px; line-height: 20px; }
+  .pins { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px var(--space-3); font: 500 13px/20px var(--font-sans); }
+  .pins dt { color: var(--ink-muted); }
+  .pins dd { margin: 0; }
+  .status { grid-area: status; display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: 0 var(--space-4); background: var(--ground-raised); border-top: 1px solid var(--line); }
+  .badges { display: flex; gap: var(--space-2); overflow-x: auto; min-width: 0; }
+  .summary { font-size: 14px; white-space: nowrap; color: var(--ink); }
 
-  .app { display: flex; flex-direction: column; height: 100dvh; }
-  .titleblock { display: grid; grid-template-columns: 1.2fr 2fr 1fr 1fr auto auto; border-bottom: 1px solid var(--rule); }
-  .cost b { color: var(--copper); }
-  .cell { padding: 6px 12px; border-right: 1px solid var(--rule); display: flex; flex-direction: column; min-width: 0; }
-  .cell small { font-size: 9px; letter-spacing: 2px; color: var(--line); }
-  .cell b { font-weight: 600; letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cell .title { border: none; padding: 0; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
-  .state b { color: var(--accent); } .state.bad b { color: var(--error); }
-  .tabs { display: none; }
-
-  main { flex: 1; min-height: 0; display: grid; grid-template-columns: 290px 1fr 1.25fr 310px; gap: 0; }
-  .pane { min-height: 0; min-width: 0; }
-  .p-layout, .p-model { padding: 10px; }
-  aside { overflow: auto; border-right: 1px solid var(--rule); }
-  aside.p-checks { border-right: none; border-left: 1px solid var(--rule); }
-  section { padding: 12px; border-bottom: 1px solid var(--rule); }
-  h2 { margin: 0 0 10px; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); font-weight: 600; }
-  label { display: flex; flex-direction: column; gap: 3px; font-size: 10px; letter-spacing: 1px; color: var(--line); text-transform: uppercase; margin-bottom: 8px; }
-  label.check { flex-direction: row; align-items: center; gap: 8px; margin-bottom: 4px; }
-  label.check input { width: auto; accent-color: var(--accent); }
-  input, select { width: 100%; text-transform: none; letter-spacing: 0; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; }
-  .row { display: flex; gap: 8px; margin-bottom: 8px; } .row > button { flex: 1; }
-  .col { display: flex; flex-direction: column; gap: 6px; } .button { text-align: center; }
-  .note { font-size: 11px; color: var(--line); margin: 6px 0; } .note.bad { color: var(--error); }
-  .findings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-  .findings li { display: grid; grid-template-columns: 38px 1fr; gap: 6px; font-size: 11px; padding: 5px 0; border-top: 1px dashed var(--faint); }
-  .findings i { font-style: normal; font-weight: 700; letter-spacing: 1px; }
-  .findings .error i { color: var(--error); } .findings .warning i { color: var(--warn); } .findings .info i { color: var(--accent); }
-  table { width: 100%; border-collapse: collapse; font-size: 11px; }
-  .tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
-  .tiers button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px; text-transform: none; letter-spacing: 0; }
-  .tiers small { font-size: 9px; color: var(--line); } .tiers button.on small { color: var(--paper); }
-  .tiers span { font-size: 10px; letter-spacing: 2px; } .tiers b { font-size: 14px; }
-  h3 { margin: 4px 0 2px; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink); }
-  .bom tfoot tr.muted td { color: var(--line); font-weight: 400; padding-top: 4px; }
-  .assumptions { margin-top: 10px; grid-template-columns: repeat(3, 1fr); }
-  .bom th { width: auto; font-size: 9px; letter-spacing: 1px; border-bottom: 1px solid var(--rule); }
-  .bom td { vertical-align: top; }
-  .bom td b { display: block; font-weight: 600; }
-  .bom td small { display: block; color: var(--line); font-size: 10px; }
-  .bom .n { text-align: right; white-space: nowrap; padding-left: 6px; }
-  .bom tfoot td { padding-top: 8px; font-weight: 700; color: var(--copper); border-bottom: none; }
-  th { text-align: left; color: var(--accent); font-weight: 600; padding: 4px 8px 4px 0; vertical-align: top; width: 48px; }
-  td { padding: 4px 0; border-bottom: 1px dashed var(--faint); word-break: break-word; }
-
-  @media (max-width: 1280px) {
-    main { grid-template-columns: 280px 1fr 300px; grid-template-rows: 1fr 1fr; }
-    .p-build { grid-row: 1 / 3; } .p-layout { grid-column: 2; grid-row: 1; } .p-model { grid-column: 2; grid-row: 2; }
-    .p-checks { grid-column: 3; grid-row: 1 / 3; }
-  }
   @media (max-width: 900px) {
-    .titleblock { grid-template-columns: 1fr auto auto; }
-    .titleblock .meta, .titleblock .brand { display: none; }
-    .tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--rule); }
-    .tabs button { border: none; border-right: 1px solid var(--rule); padding: 10px 4px; }
-    main { display: block; overflow: auto; }
-    .pane { display: none; height: 100%; }
-    .app[data-tab="layout"] .p-layout, .app[data-tab="model"] .p-model { display: block; }
-    .app[data-tab="build"] .p-build, .app[data-tab="checks"] .p-checks { display: block; border: none; }
-    .p-layout, .p-model { padding: 6px; }
+    .tool { height: auto; min-height: 100dvh; grid-template-columns: 1fr; grid-template-rows: auto auto 62vh auto auto;
+      grid-template-areas: "top" "rail" "view" "props" "status"; }
+    .topbar { flex-wrap: wrap; padding: var(--space-2) var(--space-3); gap: var(--space-2); }
+    .name { font-size: 20px; flex-basis: 50%; }
+    .level { order: 5; width: 100%; justify-content: stretch; }
+    .level .oc-seg-opt { flex: 1; padding: 0 var(--space-2); }
+    .theme { display: none; }
+    .rail { flex-direction: row; margin: var(--space-2) var(--space-3) 0; justify-content: center; align-self: stretch; }
+    .viewport { border-left: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .props { border-left: 0; }
+    .status { flex-wrap: wrap; padding: var(--space-2) var(--space-3); }
+    .summary { white-space: normal; font-size: 13px; }
   }
 </style>
