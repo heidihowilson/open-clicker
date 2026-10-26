@@ -65,7 +65,9 @@ async function route(job: Job) {
     const files: Record<string, string | Uint8Array> = {};
     for (const name of Object.keys(project.files)) {
       const text = await readFile(join(dir, name), "utf8");
-      files[name.replace(`${project.name}/`, `${project.name}/kicad/`)] = text;
+      files[name.replace(`${project.name}/`, `${project.name}/kicad/`)] = name.endsWith("README.txt")
+        ? `${job.design.name}, revision ${job.design.revision}: the routed board. Open the .kicad_pro in KiCad 7 or later to look at it or change it.\n`
+        : text;
     }
     files[`${project.name}/${project.name}-gerbers.zip`] = zip(gerbers);
     files[`${project.name}/ORDER.txt`] = order(job.design, project.name, job.report);
