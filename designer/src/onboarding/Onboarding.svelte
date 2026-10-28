@@ -89,9 +89,11 @@
     return () => { clearTimeout(t0); clearInterval(iv); removeEventListener("resize", onResize); scene?.dispose(); };
   });
 
-  /* Labels belong to keys: a key keeps its label when it moves, and only blank keys are
-   * asked about. `fresh` starts over (a new template or Design another). */
-  let labels = $state.raw<Record<string, Label>>({});
+  /* Labels follow the layout: every change asks Jev again. A key the person locked keeps its
+   * label and goes to Jev as a fixed fact. `fresh` drops the locks too (a template, Design
+   * another). The old labels stay on screen until the new answer arrives. */
+  type KeyLabel = Label & { locked?: boolean };
+  let labels = $state.raw<Record<string, KeyLabel>>({});
   function apply(r: Remote, stagger = false, fresh = false) {
     remote = r;
     scene?.setRemote(r, stagger);
@@ -99,33 +101,29 @@
     setLabels(fresh ? {} : Object.fromEntries(Object.entries(labels).filter(([id]) => ids.has(id))));
     askLabels();
   }
-  function setLabels(next: Record<string, Label>) {
+  function setLabels(next: Record<string, KeyLabel>) {
     labels = next;
-    scene?.setLabels(Object.fromEntries(Object.entries(next).map(([id, l]) => [id, l.fn])));
+    scene?.setLabels(Object.fromEntries(Object.entries(next).map(([id, l]) => [id, { fn: l.fn, locked: !!l.locked }])));
   }
 
-  /* Jev, through the router, labels the blank keys a moment after a change, with the labels
-   * already on the remote as fixed facts. Only the latest answer is used; a failed call just
-   * leaves those caps blank. */
   let labelTimer = 0, labelTurn = 0;
   function askLabels() {
     clearTimeout(labelTimer);
-    if (live(remote).every((k) => labels[k.id])) return;
     labelTimer = setTimeout(async () => {
       const turn = ++labelTurn, sent = remote;
-      const known = Object.fromEntries(live(sent).filter((k) => labels[k.id]).map((k) => [k.id, labels[k.id]!.fn]));
+      const known = Object.fromEntries(live(sent).filter((k) => labels[k.id]?.locked).map((k) => [k.id, labels[k.id]!.fn]));
       try {
         const res = await fetch(`${ROUTER_URL}/labels`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...sent, known }) });
         const body = await res.json() as { labels?: Record<string, Label> };
         if (turn !== labelTurn || !body.labels) return;
-        const next = { ...labels };
+        const next: Record<string, KeyLabel> = Object.fromEntries(Object.entries(labels).filter(([, l]) => l.locked));
         for (const [id, l] of Object.entries(body.labels)) if (!next[id] && l.confidence >= 0.15) next[id] = l;
         setLabels(next);
       } catch { /* blank caps are fine */ }
     }, 250) as unknown as number;
   }
 
-  /* ---- tap a key to choose its label ---- */
+  /* ---- tap a key: lock its label, or choose another (which locks it) ---- */
   let picker = $state<{ id: string; x: number; y: number; more: boolean } | null>(null);
   function openPicker(id: string) {
     const k = remote.keys.find((x) => x.id === id);
@@ -133,12 +131,20 @@
     const at = scene.toScreen(cellX(k.col), cellZ(k.row) - 9);
     picker = { id, x: at.x, y: at.y, more: false };
   }
+  function toggleLock() {
+    if (!picker) return;
+    const l = labels[picker.id];
+    if (!l) return;
+    setLabels({ ...labels, [picker.id]: { ...l, locked: !l.locked } });
+    picker = null;
+    askLabels();
+  }
   function choose(fn: Fn) {
     if (!picker) return;
     const id = picker.id, next = { ...labels };
-    /* One key per function (apps excepted): the key that had it goes blank and is asked again. */
+    /* One key per function (apps excepted): a key that had it loses it and is relabelled. */
     if (fn !== "app") for (const [other, l] of Object.entries(next)) if (other !== id && l.fn === fn) delete next[other];
-    next[id] = { fn, confidence: 1, alts: labels[id]?.alts ?? [] };
+    next[id] = { fn, confidence: 1, alts: labels[id]?.alts ?? [], locked: true };
     setLabels(next);
     picker = null;
     askLabels();
@@ -334,6 +340,11 @@
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="picker-shade" onclick={() => (picker = null)}></div>
   <div class="picker" role="dialog" aria-label="Choose this key's label" style={`left:${Math.min(Math.max(picker.x, 140), vw - 140)}px;top:${Math.max(picker.y, 280)}px`}>
+    {#if now}
+      <button type="button" class="lock" class:on={labels[picker.id]?.locked} onclick={toggleLock}>
+        <span class="dot" aria-hidden="true"></span>{labels[picker.id]?.locked ? `${FUNCTION_NAMES[now]} is locked · unlock` : `Keep ${FUNCTION_NAMES[now]} here`}
+      </button>
+    {/if}
     <div class="grid">
       {#each pickerTop as fn (fn)}
         <button type="button" class="chip" class:on={fn === now} onclick={() => choose(fn)}>{FUNCTION_NAMES[fn]}</button>
@@ -514,6 +525,11 @@
   .picker .chip.on { background: #1d1d1f; color: #fff; }
   .picker .all { max-height: 210px; overflow: auto; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0,0,0,.07); }
   .picker .more { margin-top: 6px; }
+  .picker .lock { display: flex; align-items: center; gap: 8px; width: 100%; height: 40px; margin-bottom: 8px; padding: 0 10px; border: 0; border-radius: 12px;
+    background: none; font: 500 14px Geist, sans-serif; color: #1d1d1f; cursor: pointer; text-align: left; }
+  .picker .lock:hover { background: #f2f2f4; }
+  .picker .lock .dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 1.5px #1d1d1f inset; }
+  .picker .lock.on .dot { background: #1d1d1f; }
   .foot { min-height: 120px; display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; max-width: 860px; }
   .row { display: flex; gap: 12px; }
 

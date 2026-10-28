@@ -128,19 +128,19 @@ export class RemoteScene {
 
   /* ---------- legends ---------- */
 
-  private legends: Record<string, Fn> = {};
+  private legends: Record<string, { fn: Fn; locked: boolean }> = {};
   /** Show these functions on the caps; keys not listed are blank. */
-  setLabels(labels: Record<string, Fn>) {
+  setLabels(labels: Record<string, { fn: Fn; locked: boolean }>) {
     this.legends = labels;
     for (const [id, o] of this.keys) this.paintLegend(id, o);
   }
   private paintLegend(id: string, o: KeyObj) {
-    const fn = this.legends[id];
+    const fn = this.legends[id]?.fn, locked = this.legends[id]?.locked ?? false;
     const material = o.legend.material as THREE.MeshBasicMaterial;
     o.legend.visible = !!fn;
     if (!fn) return;
     const ink = o.color === CAPS.light.top ? "#1d1d1f" : o.color === CAPS.red.top ? "#ffffff" : "#d1d1d6";
-    material.map = legendTexture(fn, ink);
+    material.map = legendTexture(fn, ink, locked);
     material.needsUpdate = true;
   }
   /** Live key area while the shell is being resized, in mm; null means the remote's own. */
@@ -213,9 +213,9 @@ export class RemoteScene {
       if (this.assembly) { this.scene.remove(this.assembly); this.dispose3d(this.assembly); }
       /* The exploded caps carry the same legends as the editor's. */
       const look = this.look(this.remote);
-      look.legends = Object.fromEntries(Object.entries(this.legends).map(([id, fn]) => {
+      look.legends = Object.fromEntries(Object.entries(this.legends).map(([id, l]) => {
         const color = look.caps[id];
-        return [id, legendTexture(fn, color === CAPS.light.top ? "#1d1d1f" : color === CAPS.red.top ? "#ffffff" : "#d1d1d6")];
+        return [id, legendTexture(l.fn, color === CAPS.light.top ? "#1d1d1f" : color === CAPS.red.top ? "#ffffff" : "#d1d1d6", l.locked)];
       }));
       this.assembly = buildAssembly(d, look);
       addEdges(this.assembly);

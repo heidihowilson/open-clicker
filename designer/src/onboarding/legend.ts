@@ -30,8 +30,9 @@ function icon(g: CanvasRenderingContext2D, fn: Fn): boolean {
 }
 
 const cache = new Map<string, THREE.CanvasTexture>();
-export function legendTexture(fn: Fn, ink: string): THREE.CanvasTexture {
-  const id = `${fn}|${ink}`;
+/** `locked` adds a small dot under the legend: the person chose this label and it stays. */
+export function legendTexture(fn: Fn, ink: string, locked = false): THREE.CanvasTexture {
+  const id = `${fn}|${ink}|${locked}`;
   let t = cache.get(id);
   if (t) return t;
   const c = document.createElement("canvas"); c.width = c.height = 256;
@@ -43,6 +44,7 @@ export function legendTexture(fn: Fn, ink: string): THREE.CanvasTexture {
     g.textAlign = "center"; g.textBaseline = "middle";
     g.fillText(word, 128, 132);
   }
+  if (locked) { g.beginPath(); g.arc(128, 214, 8, 0, Math.PI * 2); g.fill(); }
   t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   cache.set(id, t);
   return t;
