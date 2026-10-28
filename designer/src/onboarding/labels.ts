@@ -63,8 +63,11 @@ const order = (a: CellKey, b: CellKey) => a.row - b.row || a.col - b.col;
 /** Fixed labels need no judgment: the red key and a cross of five. */
 export interface Plan { fixed: Map<string, Fn>; sections: Section[]; blocks: { id: string; keys: CellKey[]; rows: string[]; about: string }[] }
 
-export function plan(r: Remote): Plan {
+/** `known` holds labels the keys already carry (chosen by the person or labelled earlier).
+ * They are kept as they are; only the other keys are planned. */
+export function plan(r: Remote, known: Partial<Record<string, Fn>> = {}): Plan {
   const ks = live(r), fixed = new Map<string, Fn>(), sections: Section[] = [], blocks: Plan["blocks"] = [];
+  for (const k of ks) { const fn = known[k.id]; if (fn) fixed.set(k.id, fn); }
   const at = (c: number, w: number, pool: CellKey[]) => pool.find((k) => k.col === c && k.row === w);
   const where = (rows: number[]) => {
     const mid = (Math.min(...rows) + Math.max(...rows)) / 2 / Math.max(r.rows - 1, 1);
@@ -73,12 +76,13 @@ export function plan(r: Remote): Plan {
 
   /* The first red key (reading order) is power. Another red key is something else red keys
    * are used for, chosen by Jev like any single key. */
-  const reds = ks.filter((k) => k.color === "red").sort(order);
-  if (reds[0]) fixed.set(reds[0].id, "power");
-  for (const k of reds.slice(1)) {
+  const reds = ks.filter((k) => k.color === "red" && !fixed.has(k.id)).sort(order);
+  const powerTaken = [...fixed.values()].includes("power");
+  if (reds[0] && !powerTaken) fixed.set(reds[0].id, "power");
+  for (const k of reds.slice(powerTaken ? 0 : 1)) {
     sections.push({ id: `red${k.row}c${k.col}`, keys: [k], about: `a single red key, row ${k.row + 1} of ${r.rows}, ${where([k.row])}; the remote's power key is a different red key`, candidates: RED_EXTRA });
   }
-  const rest = ks.filter((k) => k.color !== "red");
+  const rest = ks.filter((k) => k.color !== "red" && !fixed.has(k.id));
 
   /* Connected groups of the remaining keys. */
   const seen = new Set<string>(), groups: CellKey[][] = [];
@@ -165,7 +169,8 @@ export function request(r: Remote, p: Plan) {
   return { state, questions };
 }
 
-export interface Label { fn: Fn; confidence: number }
+/** A key's label, and up to three other likely functions for it (best first) for the picker. */
+export interface Label { fn: Fn; confidence: number; alts: Fn[] }
 type Answers = Record<string, { choice?: string; probabilities?: Record<string, number> }>;
 
 /** Turn Jev's answers into one label per key: numbers first where a block is a number pad,
@@ -173,13 +178,20 @@ type Answers = Record<string, { choice?: string; probabilities?: Record<string, 
 export function resolve(p: Plan, answers: Answers, threshold = 0.5): Map<string, Label> {
   const out = new Map<string, Label>();
   const used = new Set<Fn>();
-  for (const [id, fn] of p.fixed) { out.set(id, { fn, confidence: 1 }); used.add(fn); }
+  for (const [id, fn] of p.fixed) { out.set(id, { fn, confidence: 1, alts: [] }); used.add(fn); }
+  /* Each key's likely functions, from its section's label sets in Jev's order. */
+  const altsFor = new Map<string, Fn[]>();
+  for (const s of p.sections) {
+    const probs = answers[`s:${s.id}`]?.probabilities ?? {};
+    const sets = [...s.candidates].sort((a, b) => (probs[b.id] ?? 0) - (probs[a.id] ?? 0));
+    s.keys.forEach((k, i) => altsFor.set(k.id, [...new Set(sets.map((c) => c.labels[i]!))]));
+  }
   const covered = new Set<string>();
   for (const b of p.blocks) {
     const yes = answers[`b:${b.id}`]?.probabilities?.number_pad ?? 0;
     if (yes < threshold) continue;
     const digits = NUMPAD[b.rows.length]!;
-    b.keys.forEach((k, i) => { out.set(k.id, { fn: digits[i]!, confidence: yes }); used.add(digits[i]!); });
+    b.keys.forEach((k, i) => { out.set(k.id, { fn: digits[i]!, confidence: yes, alts: altsFor.get(k.id) ?? [] }); used.add(digits[i]!); });
     b.rows.forEach((r) => covered.add(r));
   }
   const ranked = p.sections.filter((s) => !covered.has(s.id)).map((s) => {
@@ -189,7 +201,7 @@ export function resolve(p: Plan, answers: Answers, threshold = 0.5): Map<string,
   for (const { s, options } of ranked) {
     const pick = options.find(({ c }) => c.labels.every((f) => f === "app" || !used.has(f)));
     if (!pick) continue;
-    s.keys.forEach((k, i) => out.set(k.id, { fn: pick.c.labels[i]!, confidence: pick.p }));
+    s.keys.forEach((k, i) => out.set(k.id, { fn: pick.c.labels[i]!, confidence: pick.p, alts: (altsFor.get(k.id) ?? []).filter((f) => f !== pick.c.labels[i]).slice(0, 3) }));
     for (const f of pick.c.labels) used.add(f);
   }
   return out;

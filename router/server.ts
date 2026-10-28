@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { check, errorsIn } from "../designer/src/lib/checks";
 import { safeParseDesign, type Design } from "../designer/src/lib/design";
 import { buildBoard, type Report } from "./pipeline";
-import { plan, request as labelRequest, resolve, type Fn } from "../designer/src/onboarding/labels";
+import { FUNCTION_NAMES, plan, request as labelRequest, resolve, type Label } from "../designer/src/onboarding/labels";
 
 const PORT = Number(process.env.PORT ?? 8790);
 const MAX_QUEUE = 6;
@@ -18,9 +18,11 @@ const TYPESAFE_KEY = process.env.TYPESAFE_API_KEY ?? "";
 const RemoteSchema = z.object({
   cols: z.number().int().min(1).max(12), rows: z.number().int().min(1).max(24),
   keys: z.array(z.object({ id: z.string().max(40), col: z.number().int().min(0).max(11), row: z.number().int().min(0).max(23), color: z.enum(["charcoal", "light", "red"]) })).max(40),
+  /** Labels the keys already carry; kept, and the rest are planned around them. */
+  known: z.record(z.string().max(40), z.enum(Object.keys(FUNCTION_NAMES) as [keyof typeof FUNCTION_NAMES, ...(keyof typeof FUNCTION_NAMES)[]])).optional(),
 });
 /* Labels depend only on where the keys are and their colours, so cache by that. */
-const labelCache = new Map<string, Record<string, { fn: Fn; confidence: number }>>();
+const labelCache = new Map<string, Record<string, Label>>();
 const DATA_DIR = process.env.DATA_DIR ?? "/data";
 const NotifySchema = z.object({ email: z.string().trim().toLowerCase().email().max(200), tier: z.enum(["diy", "kit", "complete"]).nullable() });
 const lastNotify = new Map<string, number>();
@@ -96,10 +98,11 @@ Bun.serve({
       if (!parsed.success) return json(req, { error: "Not a remote." }, 400);
       const remote = parsed.data;
       const inside = remote.keys.filter((k) => k.col < remote.cols && k.row < remote.rows);
-      const shape = JSON.stringify([remote.cols, remote.rows, inside.map((k) => [k.col, k.row, k.color]).sort()]);
+      const known = remote.known ?? {};
+      const shape = JSON.stringify([remote.cols, remote.rows, inside.map((k) => [k.col, k.row, k.color, known[k.id] ?? ""]).sort()]);
       let byCell = labelCache.get(shape);
       if (!byCell) {
-        const p = plan(remote);
+        const p = plan(remote, known);
         let answers = {};
         if (TYPESAFE_KEY && (p.sections.length || p.blocks.length)) {
           const res = await fetch("https://api.typesafe.ai/v1/systemone", {

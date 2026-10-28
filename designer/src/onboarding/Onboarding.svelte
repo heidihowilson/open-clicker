@@ -9,7 +9,7 @@
     quote, rowAt, shellRect, TIERS, toDesign, total, type CapColor, type Remote, type TierId,
   } from "./model";
   import { RemoteScene } from "./scene";
-  import type { Fn } from "./labels";
+  import { FUNCTION_NAMES, type Fn, type Label } from "./labels";
 
   type Screen = "intro" | "edit" | "buy" | "done";
   type Mode = "size" | "buttons" | null;
@@ -89,23 +89,67 @@
     return () => { clearTimeout(t0); clearInterval(iv); removeEventListener("resize", onResize); scene?.dispose(); };
   });
 
-  function apply(r: Remote, stagger = false) { remote = r; scene?.setRemote(r, stagger); askLabels(); }
+  /* Labels belong to keys: a key keeps its label when it moves, and only blank keys are
+   * asked about. `fresh` starts over (a new template or Design another). */
+  let labels = $state.raw<Record<string, Label>>({});
+  function apply(r: Remote, stagger = false, fresh = false) {
+    remote = r;
+    scene?.setRemote(r, stagger);
+    const ids = new Set(r.keys.map((k) => k.id));
+    setLabels(fresh ? {} : Object.fromEntries(Object.entries(labels).filter(([id]) => ids.has(id))));
+    askLabels();
+  }
+  function setLabels(next: Record<string, Label>) {
+    labels = next;
+    scene?.setLabels(Object.fromEntries(Object.entries(next).map(([id, l]) => [id, l.fn])));
+  }
 
-  /* Key labels: Jev, through the router, reads the layout a moment after each change.
-   * Only the latest answer is used; a failed call just leaves the caps blank. */
+  /* Jev, through the router, labels the blank keys a moment after a change, with the labels
+   * already on the remote as fixed facts. Only the latest answer is used; a failed call just
+   * leaves those caps blank. */
   let labelTimer = 0, labelTurn = 0;
   function askLabels() {
     clearTimeout(labelTimer);
+    if (live(remote).every((k) => labels[k.id])) return;
     labelTimer = setTimeout(async () => {
       const turn = ++labelTurn, sent = remote;
+      const known = Object.fromEntries(live(sent).filter((k) => labels[k.id]).map((k) => [k.id, labels[k.id]!.fn]));
       try {
-        const res = await fetch(`${ROUTER_URL}/labels`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(sent) });
-        const body = await res.json() as { labels?: Record<string, { fn: Fn; confidence: number }> };
+        const res = await fetch(`${ROUTER_URL}/labels`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...sent, known }) });
+        const body = await res.json() as { labels?: Record<string, Label> };
         if (turn !== labelTurn || !body.labels) return;
-        scene?.setLabels(Object.fromEntries(Object.entries(body.labels).filter(([, l]) => l.confidence >= 0.15).map(([id, l]) => [id, l.fn])));
+        const next = { ...labels };
+        for (const [id, l] of Object.entries(body.labels)) if (!next[id] && l.confidence >= 0.15) next[id] = l;
+        setLabels(next);
       } catch { /* blank caps are fine */ }
     }, 250) as unknown as number;
   }
+
+  /* ---- tap a key to choose its label ---- */
+  let picker = $state<{ id: string; x: number; y: number; more: boolean } | null>(null);
+  function openPicker(id: string) {
+    const k = remote.keys.find((x) => x.id === id);
+    if (!k || !scene) return;
+    const at = scene.toScreen(cellX(k.col), cellZ(k.row) - 9);
+    picker = { id, x: at.x, y: at.y, more: false };
+  }
+  function choose(fn: Fn) {
+    if (!picker) return;
+    const id = picker.id, next = { ...labels };
+    /* One key per function (apps excepted): the key that had it goes blank and is asked again. */
+    if (fn !== "app") for (const [other, l] of Object.entries(next)) if (other !== id && l.fn === fn) delete next[other];
+    next[id] = { fn, confidence: 1, alts: labels[id]?.alts ?? [] };
+    setLabels(next);
+    picker = null;
+    askLabels();
+  }
+  const pickerTop = $derived.by((): Fn[] => {
+    if (!picker) return [];
+    const l = labels[picker.id];
+    return [...new Set([...(l ? [l.fn] : []), ...(l?.alts ?? [])])].slice(0, 4);
+  });
+  const ALL_FNS = Object.keys(FUNCTION_NAMES) as Fn[];
+
   /* A change: resize release, key moved, key removed or key added (SPEC §2.3). */
   function commit() { acts += 1; lastAct = Date.now(); makeShown = false; templatesShown = false; }
   function check() {
@@ -126,7 +170,7 @@
   function back() { screen = "edit"; lastAct = Date.now(); focus = null; scene?.showParts(false); }
   function again() {
     scene?.showParts(false);
-    apply(fromLayout(LAYOUTS.streamer));
+    apply(fromLayout(LAYOUTS.streamer), false, true);
     screen = "intro"; mode = null; keysLive = false; sizeLive = false; added = false; trayReady = false;
     template = null; templatesShown = false; makeShown = false; tier = null; acts = 0; email = ""; asking = false; focus = null;
   }
@@ -137,7 +181,7 @@
     const pool: Record<CapColor, string[]> = { charcoal: [], light: [], red: [] };
     for (const k of [...live(remote)].sort((a, b) => a.row - b.row || a.col - b.col)) pool[k.color].push(k.id);
     const keys = L.keys.map(([col, row, color]) => ({ id: pool[color].shift() ?? (color !== "charcoal" ? pool.charcoal.shift() : undefined) ?? newId(), col, row, color }));
-    apply({ cols: L.cols, rows: L.rows, keys }, true);
+    apply({ cols: L.cols, rows: L.rows, keys }, true, true);
     template = name; templatesShown = false; trayReady = true; keysLive = true; sizeLive = true; lastAct = Date.now();
   }
 
@@ -145,7 +189,7 @@
   let drag: { id: string; sx: number; sy: number; ox: number; oz: number; moved: boolean } | null = null;
   const isOut = (x: number, z: number) => { const s = shellRect(remote); return x < s.minX || x > s.maxX || z < s.minZ || z > s.maxZ; };
   function stageDown(e: PointerEvent) {
-    if (!keysOn || !scene) return;
+    if (!isEdit || !scene) return;
     const p = scene.toMm(e.clientX, e.clientY);
     const col = colAt(p.x), row = rowAt(p.z);
     const k = live(remote).find((k) => k.col === col && k.row === row);
@@ -155,7 +199,7 @@
     drag = { id: k.id, sx: e.clientX, sy: e.clientY, ox: cellX(col), oz: cellZ(row), moved: false };
   }
   function stageMove(e: PointerEvent) {
-    if (!drag || !scene) return;
+    if (!drag || !scene || !keysOn) return;
     if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 3) return;
     drag.moved = true; dragId = drag.id;
     const x = drag.ox + (e.clientX - drag.sx) / scene.ppm, z = drag.oz + (e.clientY - drag.sy) / scene.ppm;
@@ -164,7 +208,8 @@
   }
   function stageUp(e: PointerEvent) {
     const d = drag; drag = null;
-    if (!d || !d.moved || !scene) return;
+    if (d && !d.moved) { openPicker(d.id); return; }
+    if (!d || !scene) return;
     const x = d.ox + (e.clientX - d.sx) / scene.ppm, z = d.oz + (e.clientY - d.sy) / scene.ppm;
     scene.endDrag(d.id);
     dragId = null; dragOut = false;
@@ -284,6 +329,28 @@
 <div class="canvas" bind:this={canvasHost} aria-hidden="true"></div>
 <div class="labels" bind:this={labelHost}></div>
 
+{#if picker}
+  {@const now = labels[picker.id]?.fn}
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div class="picker-shade" onclick={() => (picker = null)}></div>
+  <div class="picker" role="dialog" aria-label="Choose this key's label" style={`left:${Math.min(Math.max(picker.x, 140), vw - 140)}px;top:${Math.max(picker.y, 280)}px`}>
+    <div class="grid">
+      {#each pickerTop as fn (fn)}
+        <button type="button" class="chip" class:on={fn === now} onclick={() => choose(fn)}>{FUNCTION_NAMES[fn]}</button>
+      {/each}
+    </div>
+    {#if picker.more}
+      <div class="grid all">
+        {#each ALL_FNS as fn (fn)}
+          <button type="button" class="chip" class:on={fn === now} onclick={() => choose(fn)}>{FUNCTION_NAMES[fn]}</button>
+        {/each}
+      </div>
+    {:else}
+      <button type="button" class="link more" onclick={() => picker && (picker.more = true)}>More…</button>
+    {/if}
+  </div>
+{/if}
+
 <div class="root" class:editing={isEdit} style={`padding-bottom:${!trayInline && trayOn ? 150 : 40}px`}>
   <div class="head">
     {#if screen === "intro" && ready}
@@ -301,7 +368,7 @@
   </div>
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="stage" class:live={keysOn} bind:this={stageEl} style={`width:${stage.w}px;height:${stage.h}px;transition:${resizing ? "none" : "width .6s cubic-bezier(.2,.8,.2,1), height .6s cubic-bezier(.2,.8,.2,1)"}`}
+  <div class="stage" class:live={isEdit} class:movable={keysOn} bind:this={stageEl} style={`width:${stage.w}px;height:${stage.h}px;transition:${resizing ? "none" : "width .6s cubic-bezier(.2,.8,.2,1), height .6s cubic-bezier(.2,.8,.2,1)"}`}
     onpointerdown={stageDown} onpointermove={stageMove} onpointerup={stageUp} onpointercancel={stageUp}>
     {#if isEdit}
       <button type="button" class="grab y" class:on={resizing === "y"} class:shown={sizeOn} aria-label="Resize height" style={`left:${stage.w / 2 - 14}px;top:${stage.h - 9}px`}
@@ -437,7 +504,16 @@
   .head { min-height: 88px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 10px; text-align: center; max-width: 560px; }
   .sub { margin: 0; font-size: 15px; color: #6e6e73; }
   .stage { position: relative; margin: 28px 0; flex: none; touch-action: none; animation: enter 1.1s cubic-bezier(.2,.8,.2,1) both; }
-  .stage.live { pointer-events: auto; cursor: grab; }
+  .stage.live { pointer-events: auto; cursor: pointer; }
+  .stage.movable { cursor: grab; }
+  .picker-shade { position: fixed; inset: 0; z-index: 30; pointer-events: auto; }
+  .picker { position: fixed; z-index: 31; width: 260px; transform: translate(-50%, calc(-100% - 10px)); background: #fff; border-radius: 18px; padding: 10px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 24px 48px -20px rgba(0,0,0,.35); pointer-events: auto; animation: rise .25s cubic-bezier(.2,.8,.2,1) both; }
+  .picker .grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .picker .chip { border: 0; border-radius: 12px; padding: 0 12px; height: 36px; font: 500 13px/36px Geist, sans-serif; background: #f2f2f4; color: #1d1d1f; cursor: pointer; }
+  .picker .chip.on { background: #1d1d1f; color: #fff; }
+  .picker .all { max-height: 210px; overflow: auto; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0,0,0,.07); }
+  .picker .more { margin-top: 6px; }
   .foot { min-height: 120px; display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; max-width: 860px; }
   .row { display: flex; gap: 12px; }
 

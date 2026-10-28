@@ -45,3 +45,22 @@ test("a second red key is not a second power key", () => {
   expect([...labels.values()].filter((l) => l.fn === "power").length).toBe(1);
   expect(labels.get("red2")?.fn).toBe("app");
 });
+
+test("known labels are kept and the rest avoid their functions", () => {
+  const r = fromLayout(LAYOUTS.streamer);
+  const top = r.keys.find((k) => k.col === 0 && k.row === 0)!;
+  const crossTop = r.keys.find((k) => k.col === 1 && k.row === 1)!;
+  const p = plan(r, { [top.id]: "volume_up", [crossTop.id]: "home" });
+  const labels = resolve(p, Object.fromEntries(p.sections.map((s) => [`s:${s.id}`, { probabilities: { sound: 0.9 } }])));
+  expect(labels.get(top.id)?.fn).toBe("volume_up");
+  expect(labels.get(crossTop.id)?.fn).toBe("home");
+  expect([...labels.values()].filter((l) => l.fn === "volume_up").length).toBe(1);
+  expect(fnAt(r, labels, 2, 0)).toBe("power");
+});
+
+test("a second red key gets power when the person moved power elsewhere", () => {
+  const r = fromLayout(LAYOUTS.streamer);
+  const red = r.keys.find((k) => k.color === "red")!, other = r.keys.find((k) => k.col === 0 && k.row === 0)!;
+  const labels = resolve(plan(r, { [other.id]: "power" }), {});
+  expect(labels.get(red.id)?.fn).not.toBe("power");
+});
