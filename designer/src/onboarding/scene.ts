@@ -291,20 +291,23 @@ export class RemoteScene {
     const show = t > 0.6 && !this.focused;
     const box = new THREE.Box3(), v = new THREE.Vector3();
     const w = innerWidth, h = innerHeight;
-    let last = -Infinity;
+    /* Labels stay inside the stage, so they never cover the page below it. */
+    const r = this.stageRect(), top = r.top + 14, bottom = r.bottom - 14;
     const items = this.pills.map((p) => {
       box.setFromObject(p.part);
       v.set(box.max.x, (box.min.y + box.max.y) / 2, (box.min.z + box.max.z) / 2).project(this.camera);
       return { p, x: (v.x + 1) / 2 * w, y: (1 - v.y) / 2 * h };
     }).sort((a, b) => a.y - b.y);
-    for (const it of items) {
+    const step = items.length > 1 ? Math.min(30, (bottom - top) / (items.length - 1)) : 0;
+    const ys = items.map((it) => it.y);
+    for (let i = 0; i < ys.length; i++) ys[i] = Math.max(ys[i]!, top, i ? ys[i - 1]! + step : top);
+    for (let i = ys.length - 1; i >= 0; i--) ys[i] = Math.min(ys[i]!, bottom - (ys.length - 1 - i) * step);
+    items.forEach((it, i) => {
       it.p.el.style.opacity = show ? "1" : "0";
       it.p.el.style.pointerEvents = show ? "auto" : "none";
-      const y = Math.max(it.y, last + 30);
-      last = y;
       const x = Math.min(it.x + 12, w - it.p.el.offsetWidth - 8);
-      it.p.el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y - 14)}px)`;
-    }
+      it.p.el.style.transform = `translate(${Math.round(x)}px, ${Math.round(ys[i]! - 14)}px)`;
+    });
   }
 
   private dispose3d(o: THREE.Object3D) {
