@@ -326,6 +326,23 @@
   /* ---- buying ---- */
   const quotes = $derived(Object.fromEntries(TIERS.map((t) => [t.id, quote(remote, t.id)])) as Record<TierId, ReturnType<typeof quote>>);
   const chosen = $derived(tier ? quotes[tier] : null);
+  /* A solid you can print and hold before buying anything: built in the page with Manifold,
+   * loaded only when asked for. */
+  let modelling = $state(false);
+  async function printModel() {
+    failure = ""; modelling = true;
+    try {
+      const [{ default: Module }, { default: wasmUrl }, { handModel }] = await Promise.all([
+        import("manifold-3d"), import("manifold-3d/manifold.wasm?url"), import("./handmodel"),
+      ]);
+      const wasm = await Module({ locateFile: () => wasmUrl });
+      wasm.setup();
+      const { stl } = handModel(wasm, remote);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([stl], { type: "model/stl" })); a.download = "open-clicker-hand-model.stl"; a.click(); URL.revokeObjectURL(a.href);
+    } catch { failure = "The model did not build. Try again."; }
+    finally { modelling = false; }
+  }
   async function getFiles() {
     failure = ""; busy = "Sending your design…";
     try {
@@ -499,6 +516,7 @@
         </form>
       {/if}
       {#if failure}<p class="note err">{failure}</p>{/if}
+      <button type="button" class="link rise d2" disabled={modelling} onclick={printModel}>{modelling ? "Building the model…" : "Print a hand model"}</button>
       <button type="button" class="link rise d2" onclick={back}>Back</button>
     {/if}
 
