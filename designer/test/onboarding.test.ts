@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { bom } from "../src/lib/bom";
 import { check, errorsIn } from "../src/lib/checks";
 import { parseDesign } from "../src/lib/design";
 import { netlist } from "../src/lib/netlist";
@@ -40,4 +41,11 @@ test("prices rise from DIY to Complete and follow the key count", () => {
 test("the shell keeps a bottom bay below the last row", () => {
   const s = shellRect(fromLayout(LAYOUTS.streamer));
   expect(s.maxZ - (7 * 17 + 8.5)).toBeGreaterThan(20);
+});
+
+test("the onboarding's printed parts are black, not the studio's butter", () => {
+  const specs = bom(parseDesign(toDesign(fromLayout(LAYOUTS.streamer)))).map((l) => l.spec).join(" ");
+  expect(specs).toContain("Printed in black");
+  expect(specs.toLowerCase()).not.toContain("butter");
+  expect(specs).not.toContain("battery divider");
 });

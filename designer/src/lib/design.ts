@@ -64,6 +64,9 @@ export const DesignSchema = z.object({
   circuit: CircuitSchema,
   /** Optional key area in whole grid cells from the first cell, set by the onboarding editor.
    * Without it the key area is the bounding box of the keys. */
+  /** Filament colour of the printed parts. The studio's brand colourway is butter; the
+   * onboarding's remotes are black. */
+  finish: z.enum(["butter", "black"]).optional(),
   outline: z.object({ cols: z.number().int().min(1).max(12), rows: z.number().int().min(1).max(24) }).optional(),
   keys: z.array(KeySchema).min(1).max(40),
 }).superRefine((d, ctx) => {

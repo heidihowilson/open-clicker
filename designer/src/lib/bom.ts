@@ -67,10 +67,11 @@ export function bom(design: Design): BomLine[] {
   }
   if (design.options.irReceive) lines.push({ id: "ir-receiver", label: "IR receiver", spec: "38 kHz, TSOP38238 class", qty: 1, unitUsd: 1.2, basis: "Distributor, single unit", kind: "buy" });
   if (design.options.batterySense && !chip.batteryDividerBuiltIn) resistors += 2;
-  if (resistors) lines.push({ id: "resistor", label: "Resistor", spec: "0805; IR current limit and battery divider", qty: resistors, unitUsd: 0.01, basis: "Distributor, qty 100", kind: "buy" });
+  const jobs = [design.options.irTransmit && "IR current limit", design.options.batterySense && !chip.batteryDividerBuiltIn && "battery divider"].filter(Boolean).join(" and ");
+  if (resistors) lines.push({ id: "resistor", label: "Resistor", spec: `0805; ${jobs}`, qty: resistors, unitUsd: 0.01, basis: "Distributor, qty 100", kind: "buy" });
   const grams = shellGrams(design);
   const printed = (id: "shell" | "plate" | "lid", label: string, grams: number): BomLine =>
-    ({ id, label, spec: `Printed in butter PLA or PETG, about ${grams.toFixed(0)} g`, qty: 1, unitUsd: Math.round(grams * FILAMENT_USD_PER_G * 100) / 100, basis: "Filament at $25/kg", kind: "print" });
+    ({ id, label, spec: `Printed in ${design.finish ?? "butter"} PLA or PETG, about ${grams.toFixed(0)} g`, qty: 1, unitUsd: Math.round(grams * FILAMENT_USD_PER_G * 100) / 100, basis: "Filament at $25/kg", kind: "print" });
   lines.push(printed("shell", "The shell", grams.shell), printed("plate", "The plate", grams.plate), printed("lid", "The lid", grams.lid));
   return lines;
 }

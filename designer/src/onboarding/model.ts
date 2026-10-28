@@ -79,6 +79,7 @@ export function toDesign(r: Remote, name = "My Open Clicker"): Design {
     options: { irTransmit: true, irReceive: false, batterySense: false },
     battery: { capacityMah: 250, lengthMm: 30, widthMm: 20, thicknessMm: 5 },
     circuit: { ...CIRCUIT },
+    finish: "black",
     outline: { cols: r.cols, rows: r.rows },
     keys: (keys.length ? keys : [{ id: "placeholder", col: 0, row: 0, color: "charcoal" as const }])
       .map((k) => ({ id: k.id, x: cellX(k.col), y: cellZ(k.row), w: 1 as const, action: "none" as const, label: "" })),
