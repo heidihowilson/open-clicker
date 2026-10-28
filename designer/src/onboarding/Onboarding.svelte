@@ -169,7 +169,7 @@
   const pickerTop = $derived.by((): Fn[] => {
     if (!picker) return [];
     const l = labels[picker.id];
-    return [...new Set([...(l && l.fn !== "custom" ? [l.fn] : []), ...(l?.alts ?? [])])].filter((f) => f !== "custom").slice(0, 4);
+    return [...new Set(l?.alts ?? [])].filter((f) => f !== "custom" && f !== l?.fn).slice(0, 3);
   });
   /* Custom comes only from typed words. */
   const ALL_FNS = (Object.keys(FUNCTION_NAMES) as Fn[]).filter((f) => f !== "custom");
@@ -355,35 +355,31 @@
 
 {#if picker}
   {@const now = labels[picker.id]?.fn}
+  {@const locked = !!labels[picker.id]?.locked}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="picker-shade" onclick={() => describe()}></div>
   <div class="picker" role="dialog" aria-label="Choose this key's label" style={`left:${Math.min(Math.max(picker.x, 140), vw - 140)}px;top:${Math.max(picker.y, 280)}px`}>
-    <form class="say" onsubmit={describe}>
-      <button type="button" class="lock" class:on={labels[picker.id]?.locked} disabled={!now} onclick={toggleLock}
-        aria-label={labels[picker.id]?.locked ? "Unlock this key" : "Lock this key's label"} aria-pressed={!!labels[picker.id]?.locked}>
+    <div class="title">
+      <span class="name">{now === "custom" ? "✦ Custom" : now ? FUNCTION_NAMES[now] : "No label yet"}</span>
+      <button type="button" class="lock" class:on={locked} disabled={!now} onclick={toggleLock}
+        aria-label={locked ? "Unlock this key" : "Lock this key's label"} aria-pressed={locked} title={locked ? "Locked" : "Lock"}>
         <svg viewBox="0 0 20 20" aria-hidden="true">
-          <rect x="4" y="9" width="12" height="9" rx="2.5" />
-          <path d={labels[picker.id]?.locked ? "M7 9V6.5a3 3 0 0 1 6 0V9" : "M7 9V6.5a3 3 0 0 1 5.8-1.1"} />
+          <rect x="4.5" y="9" width="11" height="8.5" rx="2.2" />
+          <path d={locked ? "M7 9V6.8a3 3 0 0 1 6 0V9" : "M7 9V6.8a3 3 0 0 1 5.9-.8"} />
         </svg>
       </button>
-      <!-- svelte-ignore a11y_autofocus -->
-      <input type="text" bind:value={picker.hint} maxlength="60" enterkeyhint="done" autocomplete="off"
-        placeholder={now && now !== "custom" ? `${FUNCTION_NAMES[now]}, or say what it does` : "Say what this key does"} aria-label="What this key does" />
+    </div>
+    <form onsubmit={describe}>
+      <input type="text" bind:value={picker.hint} maxlength="60" enterkeyhint="done" autocomplete="off" placeholder="Describe it in your own words" aria-label="What this key does" />
     </form>
-    <div class="grid">
-      {#each pickerTop as fn (fn)}
+    <div class="chips">
+      {#each picker.more ? ALL_FNS : pickerTop as fn (fn)}
         <button type="button" class="chip" class:on={fn === now} onclick={() => choose(fn)}>{FUNCTION_NAMES[fn]}</button>
       {/each}
+      {#if !picker.more}
+        <button type="button" class="chip ghost" onclick={() => picker && (picker.more = true)}>More</button>
+      {/if}
     </div>
-    {#if picker.more}
-      <div class="grid all">
-        {#each ALL_FNS as fn (fn)}
-          <button type="button" class="chip" class:on={fn === now} onclick={() => choose(fn)}>{FUNCTION_NAMES[fn]}</button>
-        {/each}
-      </div>
-    {:else}
-      <button type="button" class="link more" onclick={() => picker && (picker.more = true)}>More…</button>
-    {/if}
   </div>
 {/if}
 
@@ -543,22 +539,28 @@
   .stage.live { pointer-events: auto; cursor: pointer; }
   .stage.movable { cursor: grab; }
   .picker-shade { position: fixed; inset: 0; z-index: 30; pointer-events: auto; }
-  .picker { position: fixed; z-index: 31; width: 260px; transform: translate(-50%, calc(-100% - 10px)); background: #fff; border-radius: 18px; padding: 10px;
-    box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 24px 48px -20px rgba(0,0,0,.35); pointer-events: auto; animation: rise .25s cubic-bezier(.2,.8,.2,1) both; }
-  .picker .grid { display: flex; flex-wrap: wrap; gap: 6px; }
-  .picker .chip { border: 0; border-radius: 12px; padding: 0 12px; height: 36px; font: 500 13px/36px Geist, sans-serif; background: #f2f2f4; color: #1d1d1f; cursor: pointer; }
-  .picker .chip.on { background: #1d1d1f; color: #fff; }
-  .picker .all { max-height: 210px; overflow: auto; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0,0,0,.07); }
-  .picker .more { margin-top: 6px; }
-  .picker .say { display: flex; gap: 6px; margin-bottom: 8px; }
-  .picker .lock { flex: none; width: 40px; height: 40px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 12px; background: #f2f2f4; color: #86868b; cursor: pointer; }
-  .picker .lock:disabled { opacity: .4; cursor: default; }
-  .picker .lock.on { background: #1d1d1f; color: #fff; }
-  .picker .lock svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+  .picker { position: fixed; z-index: 31; width: 252px; transform: translate(-50%, calc(-100% - 12px)); background: rgba(255,255,255,.96); backdrop-filter: blur(20px);
+    border-radius: 20px; padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px;
+    box-shadow: 0 0 0 .5px rgba(0,0,0,.08), 0 24px 48px -20px rgba(0,0,0,.35); pointer-events: auto; animation: rise .25s cubic-bezier(.2,.8,.2,1) both; }
+  .picker .title { display: flex; align-items: center; justify-content: space-between; min-height: 28px; }
+  .picker .name { font: 600 15px/1.2 Geist, sans-serif; color: #1d1d1f; letter-spacing: -.01em; }
+  .picker .lock { width: 28px; height: 28px; margin-right: -6px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%;
+    background: none; color: #aeaeb2; cursor: pointer; transition: color .2s, background .2s; }
+  .picker .lock:hover:not(:disabled) { background: #f2f2f4; color: #6e6e73; }
+  .picker .lock.on { color: #1d1d1f; }
+  .picker .lock:disabled { opacity: .35; cursor: default; }
+  .picker .lock svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
   .picker .lock svg rect { fill: currentColor; stroke: none; }
-  .picker .say input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border: 0; border-radius: 12px; background: #f2f2f4; color: #1d1d1f;
-    font: 400 16px Geist, sans-serif; outline: none; }
-  .picker .say input:focus { box-shadow: 0 0 0 2px #1d1d1f inset; background: #fff; }
+  .picker input { width: 100%; box-sizing: border-box; height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: #f2f2f4; color: #1d1d1f;
+    font: 400 16px Geist, sans-serif; outline: none; transition: box-shadow .2s, background .2s; }
+  .picker input::placeholder { color: #8e8e93; font-size: 14px; }
+  .picker input:focus { background: #fff; box-shadow: 0 0 0 1.5px #1d1d1f inset; }
+  .picker .chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 196px; overflow: auto; }
+  .picker .chip { border: 0; border-radius: 15px; padding: 0 11px; height: 30px; font: 500 13px/30px Geist, sans-serif; background: #f2f2f4; color: #1d1d1f; cursor: pointer; transition: background .15s; }
+  .picker .chip:hover { background: #e8e8ed; }
+  .picker .chip.on { box-shadow: 0 0 0 1.5px #1d1d1f inset; background: #fff; }
+  .picker .chip.ghost { background: none; color: #6e6e73; padding: 0 6px; }
+  .picker .chip.ghost:hover { color: #1d1d1f; }
   .foot { min-height: 120px; display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; max-width: 860px; }
   .row { display: flex; gap: 12px; }
 
