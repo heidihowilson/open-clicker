@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { Fn } from "./labels";
+import { MARKS } from "./marks";
 
 /* Legends drawn on a canvas: simple icons for the keys everyone knows by shape, short words
  * for the rest. Geist like the page; ink contrasts with the cap. */
@@ -39,6 +40,32 @@ function icon(g: CanvasRenderingContext2D, fn: Fn): boolean {
   return false;
 }
 
+/* Our own plain wordmarks, for brands without a published single-colour mark. */
+const WORDMARKS: Partial<Record<Fn, string>> = { disney_plus: "Disney+", prime_video: "prime", hulu: "hulu", peacock: "peacock", max: "max", xbox: "XBOX" };
+
+/* Every app legend, mark or wordmark, is drawn large, trimmed to its ink and scaled to the
+ * same visual weight (equal bounding area, capped in width and height), so a wide wordmark
+ * and a square badge read as one set. */
+function app(g: CanvasRenderingContext2D, fn: Fn, ink: string): boolean {
+  const mark = (MARKS as Partial<Record<Fn, string>>)[fn], word = WORDMARKS[fn];
+  if (!mark && !word) return false;
+  const c = document.createElement("canvas"); c.width = 768; c.height = 384;
+  const t = c.getContext("2d", { willReadFrequently: true })!;
+  t.fillStyle = ink;
+  if (mark) { t.translate(288, 0); t.scale(16, 16); t.fill(new Path2D(mark)); }
+  else { t.font = `700 150px Geist, -apple-system, "Helvetica Neue", Arial, sans-serif`; t.textAlign = "center"; t.textBaseline = "middle"; t.fillText(word!, 384, 192); }
+  const px = t.getImageData(0, 0, c.width, c.height).data;
+  let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
+  for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+    if (px[(y * c.width + x) * 4 + 3]! > 24) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  if (x1 < 0) return false;
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  const s = Math.min(76 / Math.sqrt(w * h), 150 / w, 88 / h);
+  g.drawImage(c, x0, y0, w, h, 128 - (w * s) / 2, 128 - (h * s) / 2, w * s, h * s);
+  return true;
+}
+
 const cache = new Map<string, THREE.CanvasTexture>();
 /** `locked` adds a small dot under the legend: the person chose this label and it stays. */
 export function legendTexture(fn: Fn, ink: string, locked = false): THREE.CanvasTexture {
@@ -48,7 +75,7 @@ export function legendTexture(fn: Fn, ink: string, locked = false): THREE.Canvas
   const c = document.createElement("canvas"); c.width = c.height = 256;
   const g = c.getContext("2d")!;
   g.fillStyle = g.strokeStyle = ink;
-  if (!icon(g, fn)) {
+  if (!icon(g, fn) && !app(g, fn, ink)) {
     const word = WORDS[fn] ?? "";
     g.font = `600 ${word.length <= 1 ? 92 : word.length <= 3 ? 62 : 46}px Geist, -apple-system, "Helvetica Neue", Arial, sans-serif`;
     g.textAlign = "center"; g.textBaseline = "middle";

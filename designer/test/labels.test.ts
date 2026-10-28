@@ -41,9 +41,9 @@ test("a second red key is not a second power key", () => {
   const r = fromLayout(LAYOUTS.streamer);
   const extra = { ...r, keys: [...r.keys, { id: "red2", col: 1, row: 7, color: "red" as const }] };
   const p = plan(extra);
-  const labels = resolve(p, { [`s:red7c1`]: { probabilities: { app: 0.7, stop: 0.1, mute: 0.1, input: 0.1 } } });
+  const labels = resolve(p, { [`s:red7c1`]: { probabilities: { netflix: 0.7, stop: 0.1, mute: 0.1, input: 0.1 } } });
   expect([...labels.values()].filter((l) => l.fn === "power").length).toBe(1);
-  expect(labels.get("red2")?.fn).toBe("app");
+  expect(labels.get("red2")?.fn).toBe("netflix");
 });
 
 test("known labels are kept and the rest avoid their functions", () => {

@@ -11,7 +11,10 @@ export const FUNCTION_NAMES = {
   play_pause: "Play/pause", rewind: "Rewind", fast_forward: "Fast forward", stop: "Stop",
   volume_up: "Volume up", volume_down: "Volume down", mute: "Mute", channel_up: "Channel up", channel_down: "Channel down",
   digit_1: "1", digit_2: "2", digit_3: "3", digit_4: "4", digit_5: "5", digit_6: "6", digit_7: "7", digit_8: "8", digit_9: "9", digit_0: "0",
-  app: "App", custom: "Custom",
+  netflix: "Netflix", youtube: "YouTube", disney_plus: "Disney+", prime_video: "Prime Video", apple_tv: "Apple TV", max: "Max",
+  hulu: "Hulu", paramount_plus: "Paramount+", peacock: "Peacock", spotify: "Spotify", plex: "Plex", jellyfin: "Jellyfin", twitch: "Twitch",
+  playstation: "PlayStation", xbox: "Xbox",
+  app: "Other app", custom: "Custom",
 } as const;
 export type Fn = keyof typeof FUNCTION_NAMES;
 
@@ -48,7 +51,8 @@ const ROWS: Record<number, Candidate[]> = {
 };
 /* What a second red key usually is on a TV remote. */
 const RED_EXTRA: Candidate[] = [
-  { id: "app", about: "A streaming app shortcut, like the red Netflix or YouTube key", labels: ["app"] },
+  { id: "netflix", about: "The Netflix key, which is red on most remotes", labels: ["netflix"] },
+  { id: "youtube", about: "The YouTube key, often red", labels: ["youtube"] },
   { id: "stop", about: "Stop playback", labels: ["stop"] },
   { id: "mute", about: "Mute", labels: ["mute"] },
   { id: "input", about: "Input or source", labels: ["input"] },
@@ -239,7 +243,7 @@ export function resolve(p: Plan, answers: Answers, threshold = 0.5): Map<string,
  * the words stay with the key for the phone to set up later. */
 const HINT_CRITERIA: Record<string, string> = {
   ...FUNCTION_NAMES,
-  app: "Opens a streaming app, such as Netflix, YouTube or Jellyfin",
+  app: "Opens some other streaming app or service that is not named in this list",
   custom: "None of these: something else the person will set up themselves",
 };
 export function hintRequest(hints: string[]) {
