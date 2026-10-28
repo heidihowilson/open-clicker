@@ -74,6 +74,29 @@ export function plan(r: Remote, known: Partial<Record<string, Fn>> = {}): Plan {
     return mid < 0.34 ? "near the top" : mid > 0.66 ? "near the bottom" : "in the middle";
   };
 
+  /* The labelled keys touching a section, named, so Jev sees what it sits between. */
+  const beside = (keys: CellKey[]) => {
+    const names: string[] = [];
+    const side = (k: CellKey | undefined, where: string) => { const fn = k && fixed.get(k.id); if (fn) names.push(`${FUNCTION_NAMES[fn]} ${where}`); };
+    const first = keys[0]!, last = keys[keys.length - 1]!;
+    side(at(first.col - 1, first.row, ks), "on its left"); side(at(last.col + 1, last.row, ks), "on its right");
+    for (const k of keys) { side(at(k.col, k.row - 1, ks), "above"); side(at(k.col, k.row + 1, ks), "below"); }
+    return names.length ? `; next to ${[...new Set(names)].join(", ")}` : "";
+  };
+  /* Where a row also holds labelled keys, the familiar rows that agree with those labels
+   * name the rest: Volume down, _, Volume up is the sound row, so the gap is Mute. */
+  const fitting = (keys: CellKey[]): Candidate[] => {
+    const row = keys[0]!.row;
+    let a = keys[0]!.col, b = a;
+    while (at(a - 1, row, ks)) a--;
+    while (at(b + 1, row, ks)) b++;
+    const run = Array.from({ length: b - a + 1 }, (_, i) => at(a + i, row, ks)!);
+    /* Only an unbroken run that holds every key of the section, plus labelled keys. */
+    if (run.length === keys.length || !keys.every((k) => run.includes(k))) return [];
+    return (ROWS[run.length] ?? []).filter((c) => run.every((k, i) => !fixed.has(k.id) || fixed.get(k.id) === c.labels[i]))
+      .map((c) => ({ id: `fit_${c.id}`, about: `${c.about} (matching the labelled keys in this row)`, labels: keys.map((k) => c.labels[run.indexOf(k)]!) }));
+  };
+
   /* The first red key (reading order) is power. Another red key is something else red keys
    * are used for, chosen by Jev like any single key. */
   const reds = ks.filter((k) => k.color === "red" && !fixed.has(k.id)).sort(order);
@@ -119,8 +142,9 @@ export function plan(r: Remote, known: Partial<Record<string, Fn>> = {}): Plan {
       rowIds.push(id);
       sections.push({
         id, keys,
-        about: `${keys.length === 1 ? "a single key" : `a row of ${keys.length} keys`}${light ? ` (${light} light grey)` : ""}, row ${row + 1} of ${r.rows}, ${where([row])}`,
-        candidates: ROWS[keys.length] ?? [{ id: "apps", about: `${keys.length} streaming app shortcuts`, labels: keys.map(() => "app") }],
+        about: `${keys.length === 1 ? "a single key" : `a row of ${keys.length} keys`}${light ? ` (${light} light grey)` : ""}, row ${row + 1} of ${r.rows}, ${where([row])}${beside(keys)}`,
+        candidates: [...fitting(keys), ...(ROWS[keys.length] ?? [{ id: "apps", about: `${keys.length} streaming app shortcuts`, labels: keys.map(() => "app") }])]
+          .filter((c, i, all) => all.findIndex((x) => x.labels.join() === c.labels.join()) === i),
       });
     }
     /* A run of 3 or 4 consecutive full rows, 3 keys wide, may be a number pad instead of

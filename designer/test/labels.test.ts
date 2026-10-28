@@ -64,3 +64,13 @@ test("a second red key gets power when the person moved power elsewhere", () => 
   const labels = resolve(plan(r, { [other.id]: "power" }), {});
   expect(labels.get(red.id)?.fn).not.toBe("power");
 });
+
+test("a key between locked Vol− and Vol+ is offered Mute first", () => {
+  const keys = [0, 1, 2].map((col) => ({ id: `k${col}`, col, row: 0, color: "charcoal" as const }));
+  const p = plan({ cols: 3, rows: 3, keys }, { k0: "volume_down", k2: "volume_up" });
+  const s = p.sections.find((x) => x.keys.some((k) => k.id === "k1"))!;
+  expect(s.candidates[0]!.labels).toEqual(["mute"]);
+  expect(s.about).toContain("Volume down on its left");
+  const labels = resolve(p, { [`s:${s.id}`]: { probabilities: { [s.candidates[0]!.id]: 0.6 } } });
+  expect(labels.get("k1")?.fn).toBe("mute");
+});
