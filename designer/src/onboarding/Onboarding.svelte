@@ -92,7 +92,7 @@
   /* Labels follow the layout: every change asks Jev again. A key the person locked keeps its
    * label and goes to Jev as a fixed fact. `fresh` drops the locks too (a template, Design
    * another). The old labels stay on screen until the new answer arrives. */
-  type KeyLabel = Label & { locked?: boolean };
+  type KeyLabel = Label & { locked?: boolean; hint?: string };
   let labels = $state.raw<Record<string, KeyLabel>>({});
   function apply(r: Remote, stagger = false, fresh = false) {
     remote = r;
@@ -111,31 +111,48 @@
     clearTimeout(labelTimer);
     labelTimer = setTimeout(async () => {
       const turn = ++labelTurn, sent = remote;
-      const known = Object.fromEntries(live(sent).filter((k) => labels[k.id]?.locked).map((k) => [k.id, labels[k.id]!.fn]));
+      const known = Object.fromEntries(live(sent).filter((k) => labels[k.id]?.locked && !labels[k.id]!.hint).map((k) => [k.id, labels[k.id]!.fn]));
+      const hints = Object.fromEntries(live(sent).filter((k) => labels[k.id]?.hint).map((k) => [k.id, labels[k.id]!.hint!]));
       try {
-        const res = await fetch(`${ROUTER_URL}/labels`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...sent, known }) });
+        const res = await fetch(`${ROUTER_URL}/labels`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...sent, known, hints }) });
         const body = await res.json() as { labels?: Record<string, Label> };
         if (turn !== labelTurn || !body.labels) return;
         const next: Record<string, KeyLabel> = Object.fromEntries(Object.entries(labels).filter(([, l]) => l.locked));
-        for (const [id, l] of Object.entries(body.labels)) if (!next[id] && l.confidence >= 0.15) next[id] = l;
+        /* A hinted key takes the function Jev read from its words; its hint and lock stay. */
+        for (const [id, l] of Object.entries(body.labels)) {
+          const was = next[id];
+          if (was?.hint) next[id] = { ...l, locked: true, hint: was.hint };
+          else if (!was && l.confidence >= 0.15) next[id] = l;
+        }
         setLabels(next);
       } catch { /* blank caps are fine */ }
     }, 250) as unknown as number;
   }
 
   /* ---- tap a key: lock its label, or choose another (which locks it) ---- */
-  let picker = $state<{ id: string; x: number; y: number; more: boolean } | null>(null);
+  let picker = $state<{ id: string; x: number; y: number; more: boolean; hint: string } | null>(null);
   function openPicker(id: string) {
     const k = remote.keys.find((x) => x.id === id);
     if (!k || !scene) return;
     const at = scene.toScreen(cellX(k.col), cellZ(k.row) - 9);
-    picker = { id, x: at.x, y: at.y, more: false };
+    picker = { id, x: at.x, y: at.y, more: false, hint: labels[id]?.hint ?? "" };
   }
   function toggleLock() {
     if (!picker) return;
     const l = labels[picker.id];
     if (!l) return;
-    setLabels({ ...labels, [picker.id]: { ...l, locked: !l.locked } });
+    /* Unlocking hands the key back to Jev, so its words go too. */
+    setLabels({ ...labels, [picker.id]: l.locked ? { ...l, locked: false, hint: undefined } : { ...l, locked: true } });
+    picker = null;
+    askLabels();
+  }
+  /* Words typed for a key lock it; Jev reads them as a function, or the key becomes custom. */
+  function describe(e?: SubmitEvent) {
+    e?.preventDefault();
+    if (!picker) return;
+    const id = picker.id, hint = picker.hint.trim().slice(0, 60), l = labels[id];
+    if (hint === (l?.hint ?? "")) { picker = null; return; }
+    setLabels({ ...labels, [id]: hint ? { fn: l?.fn ?? "custom", confidence: 1, alts: l?.alts ?? [], locked: true, hint } : { ...l!, locked: false, hint: undefined } });
     picker = null;
     askLabels();
   }
@@ -152,9 +169,10 @@
   const pickerTop = $derived.by((): Fn[] => {
     if (!picker) return [];
     const l = labels[picker.id];
-    return [...new Set([...(l ? [l.fn] : []), ...(l?.alts ?? [])])].slice(0, 4);
+    return [...new Set([...(l && l.fn !== "custom" ? [l.fn] : []), ...(l?.alts ?? [])])].filter((f) => f !== "custom").slice(0, 4);
   });
-  const ALL_FNS = Object.keys(FUNCTION_NAMES) as Fn[];
+  /* Custom comes only from typed words. */
+  const ALL_FNS = (Object.keys(FUNCTION_NAMES) as Fn[]).filter((f) => f !== "custom");
 
   /* A change: resize release, key moved, key removed or key added (SPEC §2.3). */
   function commit() { acts += 1; lastAct = Date.now(); makeShown = false; templatesShown = false; }
@@ -338,13 +356,20 @@
 {#if picker}
   {@const now = labels[picker.id]?.fn}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-  <div class="picker-shade" onclick={() => (picker = null)}></div>
+  <div class="picker-shade" onclick={() => describe()}></div>
   <div class="picker" role="dialog" aria-label="Choose this key's label" style={`left:${Math.min(Math.max(picker.x, 140), vw - 140)}px;top:${Math.max(picker.y, 280)}px`}>
-    {#if now}
-      <button type="button" class="lock" class:on={labels[picker.id]?.locked} onclick={toggleLock}>
-        <span class="dot" aria-hidden="true"></span>{labels[picker.id]?.locked ? `${FUNCTION_NAMES[now]} is locked · unlock` : `Keep ${FUNCTION_NAMES[now]} here`}
+    <form class="say" onsubmit={describe}>
+      <button type="button" class="lock" class:on={labels[picker.id]?.locked} disabled={!now} onclick={toggleLock}
+        aria-label={labels[picker.id]?.locked ? "Unlock this key" : "Lock this key's label"} aria-pressed={!!labels[picker.id]?.locked}>
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <rect x="4" y="9" width="12" height="9" rx="2.5" />
+          <path d={labels[picker.id]?.locked ? "M7 9V6.5a3 3 0 0 1 6 0V9" : "M7 9V6.5a3 3 0 0 1 5.8-1.1"} />
+        </svg>
       </button>
-    {/if}
+      <!-- svelte-ignore a11y_autofocus -->
+      <input type="text" bind:value={picker.hint} maxlength="60" enterkeyhint="done" autocomplete="off"
+        placeholder={now && now !== "custom" ? `${FUNCTION_NAMES[now]}, or say what it does` : "Say what this key does"} aria-label="What this key does" />
+    </form>
     <div class="grid">
       {#each pickerTop as fn (fn)}
         <button type="button" class="chip" class:on={fn === now} onclick={() => choose(fn)}>{FUNCTION_NAMES[fn]}</button>
@@ -525,11 +550,15 @@
   .picker .chip.on { background: #1d1d1f; color: #fff; }
   .picker .all { max-height: 210px; overflow: auto; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0,0,0,.07); }
   .picker .more { margin-top: 6px; }
-  .picker .lock { display: flex; align-items: center; gap: 8px; width: 100%; height: 40px; margin-bottom: 8px; padding: 0 10px; border: 0; border-radius: 12px;
-    background: none; font: 500 14px Geist, sans-serif; color: #1d1d1f; cursor: pointer; text-align: left; }
-  .picker .lock:hover { background: #f2f2f4; }
-  .picker .lock .dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 1.5px #1d1d1f inset; }
-  .picker .lock.on .dot { background: #1d1d1f; }
+  .picker .say { display: flex; gap: 6px; margin-bottom: 8px; }
+  .picker .lock { flex: none; width: 40px; height: 40px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 12px; background: #f2f2f4; color: #86868b; cursor: pointer; }
+  .picker .lock:disabled { opacity: .4; cursor: default; }
+  .picker .lock.on { background: #1d1d1f; color: #fff; }
+  .picker .lock svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+  .picker .lock svg rect { fill: currentColor; stroke: none; }
+  .picker .say input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border: 0; border-radius: 12px; background: #f2f2f4; color: #1d1d1f;
+    font: 400 16px Geist, sans-serif; outline: none; }
+  .picker .say input:focus { box-shadow: 0 0 0 2px #1d1d1f inset; background: #fff; }
   .foot { min-height: 120px; display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; max-width: 860px; }
   .row { display: flex; gap: 12px; }
 

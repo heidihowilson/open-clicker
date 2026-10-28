@@ -20,6 +20,16 @@ function icon(g: CanvasRenderingContext2D, fn: Fn): boolean {
     case "rewind": tri([[128, 98], [128, 158], [88, 128]]); tri([[168, 98], [168, 158], [128, 128]]); return true;
     case "fast_forward": tri([[88, 98], [88, 158], [128, 128]]); tri([[128, 98], [128, 158], [168, 128]]); return true;
     case "stop": g.fillRect(102, 102, 52, 52); return true;
+    case "custom": {
+      /* A four-point sparkle: the person named this key in their own words. */
+      g.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4 - Math.PI / 2, r = i % 2 ? 11 : 40;
+        g.lineTo(128 + Math.cos(a) * r, 128 + Math.sin(a) * r);
+      }
+      g.closePath(); g.fill();
+      return true;
+    }
     case "power":
       g.lineWidth = 11; g.lineCap = "round";
       g.beginPath(); g.arc(128, 134, 30, -Math.PI / 2 + 0.75, -Math.PI / 2 - 0.75 + Math.PI * 2); g.stroke();

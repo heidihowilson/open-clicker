@@ -11,7 +11,7 @@ export const FUNCTION_NAMES = {
   play_pause: "Play/pause", rewind: "Rewind", fast_forward: "Fast forward", stop: "Stop",
   volume_up: "Volume up", volume_down: "Volume down", mute: "Mute", channel_up: "Channel up", channel_down: "Channel down",
   digit_1: "1", digit_2: "2", digit_3: "3", digit_4: "4", digit_5: "5", digit_6: "6", digit_7: "7", digit_8: "8", digit_9: "9", digit_0: "0",
-  app: "App",
+  app: "App", custom: "Custom",
 } as const;
 export type Fn = keyof typeof FUNCTION_NAMES;
 
@@ -65,7 +65,7 @@ export interface Plan { fixed: Map<string, Fn>; sections: Section[]; blocks: { i
 
 /** `known` holds labels the keys already carry (chosen by the person or labelled earlier).
  * They are kept as they are; only the other keys are planned. */
-export function plan(r: Remote, known: Partial<Record<string, Fn>> = {}): Plan {
+export function plan(r: Remote, known: Partial<Record<string, Fn>> = {}, hints: Record<string, string> = {}): Plan {
   const ks = live(r), fixed = new Map<string, Fn>(), sections: Section[] = [], blocks: Plan["blocks"] = [];
   for (const k of ks) { const fn = known[k.id]; if (fn) fixed.set(k.id, fn); }
   const at = (c: number, w: number, pool: CellKey[]) => pool.find((k) => k.col === c && k.row === w);
@@ -77,7 +77,10 @@ export function plan(r: Remote, known: Partial<Record<string, Fn>> = {}): Plan {
   /* The labelled keys touching a section, named, so Jev sees what it sits between. */
   const beside = (keys: CellKey[]) => {
     const names: string[] = [];
-    const side = (k: CellKey | undefined, where: string) => { const fn = k && fixed.get(k.id); if (fn) names.push(`${FUNCTION_NAMES[fn]} ${where}`); };
+    const side = (k: CellKey | undefined, where: string) => {
+      const fn = k && fixed.get(k.id);
+      if (fn) names.push(`${fn === "custom" ? `a key the person described as "${hints[k.id] ?? "custom"}"` : FUNCTION_NAMES[fn]} ${where}`);
+    };
     const first = keys[0]!, last = keys[keys.length - 1]!;
     side(at(first.col - 1, first.row, ks), "on its left"); side(at(last.col + 1, last.row, ks), "on its right");
     for (const k of keys) { side(at(k.col, k.row - 1, ks), "above"); side(at(k.col, k.row + 1, ks), "below"); }
@@ -164,7 +167,7 @@ export function plan(r: Remote, known: Partial<Record<string, Fn>> = {}): Plan {
 
 /** The Jev request: one Choice per section and per block, all in one call. */
 export function request(r: Remote, p: Plan) {
-  const fixed = [...p.fixed.values()];
+  const fixed = [...p.fixed.values()].filter((f) => f !== "custom");
   const state = {
     remote: `A TV remote with ${live(r).length} blank keys in ${r.rows} rows. A person laid it out to look like a familiar TV remote.`,
     already_known: fixed.length ? `These keys are already labelled: ${[...new Set(fixed)].map((f) => FUNCTION_NAMES[f]).join(", ")}.` : "No key is labelled yet.",
@@ -223,10 +226,36 @@ export function resolve(p: Plan, answers: Answers, threshold = 0.5): Map<string,
     return { s, options: [...s.candidates].sort((a, b) => (probs[b.id] ?? 0) - (probs[a.id] ?? 0)).map((c) => ({ c, p: probs[c.id] ?? 0 })) };
   }).sort((a, b) => (b.options[0]?.p ?? 0) - (a.options[0]?.p ?? 0));
   for (const { s, options } of ranked) {
-    const pick = options.find(({ c }) => c.labels.every((f) => f === "app" || !used.has(f)));
+    const pick = options.find(({ c }) => c.labels.every((f) => f === "app" || f === "custom" || !used.has(f)));
     if (!pick) continue;
     s.keys.forEach((k, i) => out.set(k.id, { fn: pick.c.labels[i]!, confidence: pick.p, alts: (altsFor.get(k.id) ?? []).filter((f) => f !== pick.c.labels[i]).slice(0, 3) }));
     for (const f of pick.c.labels) used.add(f);
   }
   return out;
+}
+
+/* Hints: words a person typed for a key ("skip ads", "the Netflix button"). Jev reads each
+ * one as a function, or as custom when no function fits; a custom key shows an emblem, and
+ * the words stay with the key for the phone to set up later. */
+const HINT_CRITERIA: Record<string, string> = {
+  ...FUNCTION_NAMES,
+  app: "Opens a streaming app, such as Netflix, YouTube or Jellyfin",
+  custom: "None of these: something else the person will set up themselves",
+};
+export function hintRequest(hints: string[]) {
+  return {
+    state: { hints },
+    questions: Object.fromEntries(hints.map((_, i) => [`h${i}`, {
+      type: "choice",
+      instructions: `A person wrote \`hints[${i}]\` to describe what one key on their TV remote does. Which of these functions is it? If it is none of them, choose custom.`,
+      criteria: HINT_CRITERIA,
+    }])),
+  };
+}
+/** A hint's function: Jev's choice when it is fairly sure, otherwise custom. */
+export function readHint(answer: { probabilities?: Record<string, number> } | undefined, threshold = 0.5): Label {
+  const ranked = Object.entries(answer?.probabilities ?? {}).sort((a, b) => b[1] - a[1]) as [Fn, number][];
+  const [fn, p] = ranked[0] ?? ["custom", 0];
+  const alts = ranked.slice(0, 4).map(([f]) => f).filter((f) => f !== "custom" && f !== fn).slice(0, 3);
+  return p >= threshold ? { fn, confidence: p, alts } : { fn: "custom", confidence: 1 - p, alts: ranked.slice(0, 3).map(([f]) => f).filter((f) => f !== "custom") };
 }

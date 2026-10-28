@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { check, errorsIn } from "../designer/src/lib/checks";
 import { safeParseDesign, type Design } from "../designer/src/lib/design";
 import { buildBoard, type Report } from "./pipeline";
-import { FUNCTION_NAMES, plan, request as labelRequest, resolve, type Label } from "../designer/src/onboarding/labels";
+import { FUNCTION_NAMES, hintRequest, plan, readHint, request as labelRequest, resolve, type Fn, type Label } from "../designer/src/onboarding/labels";
 
 const PORT = Number(process.env.PORT ?? 8790);
 const MAX_QUEUE = 6;
@@ -19,10 +19,24 @@ const RemoteSchema = z.object({
   cols: z.number().int().min(1).max(12), rows: z.number().int().min(1).max(24),
   keys: z.array(z.object({ id: z.string().max(40), col: z.number().int().min(0).max(11), row: z.number().int().min(0).max(23), color: z.enum(["charcoal", "light", "red"]) })).max(40),
   /** Labels the keys already carry; kept, and the rest are planned around them. */
-  known: z.record(z.string().max(40), z.enum(Object.keys(FUNCTION_NAMES) as [keyof typeof FUNCTION_NAMES, ...(keyof typeof FUNCTION_NAMES)[]])).optional(),
+  known: z.record(z.string().max(40), z.enum(Object.keys(FUNCTION_NAMES) as [Fn, ...Fn[]])).optional(),
+  /** Words the person typed for a key; Jev reads them as a function, or custom. */
+  hints: z.record(z.string().max(40), z.string().trim().min(1).max(60)).optional(),
 });
 /* Labels depend only on where the keys are and their colours, so cache by that. */
 const labelCache = new Map<string, Record<string, Label>>();
+const hintCache = new Map<string, Label>();
+
+async function jev(body: object): Promise<Record<string, never>> {
+  if (!TYPESAFE_KEY) return {};
+  const res = await fetch("https://api.typesafe.ai/v1/systemone", {
+    method: "POST", signal: AbortSignal.timeout(4000),
+    headers: { authorization: `Bearer ${TYPESAFE_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({ model: "jev-latest", ...body }),
+  }).catch(() => null);
+  const out = res?.ok ? await res.json() as { answers?: Record<string, never> } : null;
+  return out?.answers ?? {};
+}
 const DATA_DIR = process.env.DATA_DIR ?? "/data";
 const NotifySchema = z.object({ email: z.string().trim().toLowerCase().email().max(200), tier: z.enum(["diy", "kit", "complete"]).nullable() });
 const lastNotify = new Map<string, number>();
@@ -98,26 +112,29 @@ Bun.serve({
       if (!parsed.success) return json(req, { error: "Not a remote." }, 400);
       const remote = parsed.data;
       const inside = remote.keys.filter((k) => k.col < remote.cols && k.row < remote.rows);
-      const known = remote.known ?? {};
-      const shape = JSON.stringify([remote.cols, remote.rows, inside.map((k) => [k.col, k.row, k.color, known[k.id] ?? ""]).sort()]);
+      /* Hinted keys first: each hint becomes a function (or custom), then counts as known. */
+      const hints = Object.fromEntries(Object.entries(remote.hints ?? {}).filter(([id]) => inside.some((k) => k.id === id)));
+      const fresh = [...new Set(Object.values(hints))].filter((h) => !hintCache.has(h.toLowerCase()));
+      if (fresh.length) {
+        const answers = await jev(hintRequest(fresh));
+        if (Object.keys(answers).length) {
+          if (hintCache.size > 2000) hintCache.clear();
+          fresh.forEach((h, i) => hintCache.set(h.toLowerCase(), readHint(answers[`h${i}`])));
+        }
+      }
+      const hinted = Object.fromEntries(Object.entries(hints).map(([id, h]) => [id, hintCache.get(h.toLowerCase()) ?? { fn: "custom" as const, confidence: 0, alts: [] }]));
+      const known: Partial<Record<string, Fn>> = { ...remote.known, ...Object.fromEntries(Object.entries(hinted).map(([id, l]) => [id, l.fn])) };
+      const shape = JSON.stringify([remote.cols, remote.rows, inside.map((k) => [k.col, k.row, k.color, known[k.id] ?? "", known[k.id] === "custom" ? hints[k.id] : ""]).sort()]);
       let byCell = labelCache.get(shape);
       if (!byCell) {
-        const p = plan(remote, known);
-        let answers = {};
-        if (TYPESAFE_KEY && (p.sections.length || p.blocks.length)) {
-          const res = await fetch("https://api.typesafe.ai/v1/systemone", {
-            method: "POST", signal: AbortSignal.timeout(4000),
-            headers: { authorization: `Bearer ${TYPESAFE_KEY}`, "content-type": "application/json" },
-            body: JSON.stringify({ model: "jev-latest", ...labelRequest(remote, p) }),
-          }).catch(() => null);
-          const out = res?.ok ? await res.json() as { answers?: Record<string, never> } : null;
-          if (out?.answers) answers = out.answers;
-        }
+        const p = plan(remote, known, hints);
+        const answers = p.sections.length || p.blocks.length ? await jev(labelRequest(remote, p)) : {};
         const labels = resolve(p, answers);
         byCell = Object.fromEntries(inside.filter((k) => labels.has(k.id)).map((k) => [`${k.col},${k.row}`, labels.get(k.id)!]));
         if (labelCache.size > 2000) labelCache.clear();
         labelCache.set(shape, byCell);
       }
+      for (const k of inside) if (hinted[k.id]) byCell = { ...byCell, [`${k.col},${k.row}`]: hinted[k.id]! };
       return json(req, { labels: Object.fromEntries(inside.filter((k) => byCell[`${k.col},${k.row}`]).map((k) => [k.id, byCell[`${k.col},${k.row}`]])) });
     }
 

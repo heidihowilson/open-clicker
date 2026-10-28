@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { plan, resolve } from "../src/onboarding/labels";
+import { plan, readHint, request, resolve } from "../src/onboarding/labels";
 import { fromLayout, LAYOUTS, type Remote } from "../src/onboarding/model";
 
 const fnAt = (r: Remote, labels: ReturnType<typeof resolve>, col: number, row: number) =>
@@ -73,4 +73,19 @@ test("a key between locked Vol− and Vol+ is offered Mute first", () => {
   expect(s.about).toContain("Volume down on its left");
   const labels = resolve(p, { [`s:${s.id}`]: { probabilities: { [s.candidates[0]!.id]: 0.6 } } });
   expect(labels.get("k1")?.fn).toBe("mute");
+});
+
+test("a hint Jev is sure of becomes that function; an unsure one becomes custom", () => {
+  expect(readHint({ probabilities: { mute: 0.78, volume_down: 0.18, custom: 0.04 } }).fn).toBe("mute");
+  const unsure = readHint({ probabilities: { app: 0.45, custom: 0.42, home: 0.05 } });
+  expect(unsure.fn).toBe("custom");
+  expect(unsure.alts).not.toContain("custom");
+  expect(readHint(undefined).fn).toBe("custom");
+});
+
+test("a custom key is named to its neighbours by the person's words", () => {
+  const r: Remote = { cols: 2, rows: 1, keys: [{ id: "a", col: 0, row: 0, color: "charcoal" }, { id: "b", col: 1, row: 0, color: "charcoal" }] };
+  const p = plan(r, { a: "custom" }, { a: "Grandma's channel" });
+  expect(p.sections[0]!.about).toContain(`described as "Grandma's channel"`);
+  expect(request(r, p).state.already_known).toBe("No key is labelled yet.");
 });
