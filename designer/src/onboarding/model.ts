@@ -2,6 +2,7 @@ import { CIRCUIT, PITCH, type Design } from "../lib/design";
 import { boardBounds, SHELL_RULES } from "../lib/geometry";
 import { tiers, type Tier } from "../lib/pricing";
 import { SHELL } from "../lib/parts-data";
+import type { Fn } from "./labels";
 
 /* The first-visit editor's model (docs/onboarding/SPEC.md). A remote is a key area of whole
  * grid cells and keys that each sit in one cell with one of three colours. Every other choice
@@ -28,22 +29,37 @@ export const MAX_ROWS = 12;
 export const MIN_ROWS = 2;
 export const MIN_COLS = 1;
 
-export interface Layout { name: string; cols: number; rows: number; keys: [number, number, CapColor][] }
+/** A layout's keys: cell, cap colour and, for the named templates, each key's function. */
+export interface Layout { name: string; cols: number; rows: number; keys: [number, number, CapColor, Fn?][] }
 
 const grid = (cols: number[], rows: number[]): [number, number][] => rows.flatMap((r) => cols.map((c) => [c, r] as [number, number]));
 const paint = (pts: [number, number][], red: number, light: number): [number, number, CapColor][] =>
   pts.map(([c, r], i) => [c, r, i === red ? "red" : i === light ? "light" : "charcoal"]);
+const C = "charcoal" as const;
 
 /* Layouts from SPEC §3.1, in cells, cut to what one controller scans. */
 export const LAYOUTS: Record<"streamer" | "boomer" | "brick" | "blank", Layout> = {
-  /* back/power; D-pad with select; home/mute/menu; rew/play/ff; vol −/+ */
-  streamer: { name: "The Streamer", cols: 3, rows: 8, keys: paint([[0, 0], [2, 0], [1, 1], [0, 2], [1, 2], [2, 2], [1, 3], [0, 5], [1, 5], [2, 5], [0, 6], [1, 6], [2, 6], [0, 7], [2, 7]], 1, 4) },
-  /* input/mute/power; numpad with guide/0/info; nav cross with back */
-  boomer: { name: "The Boomer", cols: 3, rows: 9, keys: paint([[0, 0], [1, 0], [2, 0], ...grid([0, 1, 2], [1, 2, 3, 4]), [0, 6], [1, 6], [0, 7], [1, 7], [2, 7], [1, 8]], 2, 18) },
-  /* a solid grid in the original Brick's proportions */
+  /* A small streaming-stick remote: settings and power, the D-pad, back and home, three apps. */
+  streamer: { name: "The Streamer", cols: 3, rows: 6, keys: [
+    [0, 0, C, "settings"], [2, 0, "red", "power"],
+    [1, 1, C, "up"], [0, 2, C, "left"], [1, 2, "light", "ok"], [2, 2, C, "right"], [1, 3, C, "down"],
+    [0, 4, C, "back"], [2, 4, C, "home"],
+    [0, 5, C, "netflix"], [1, 5, C, "youtube"], [2, 5, C, "disney_plus"],
+  ] },
+  /* Input, mute, power; a number pad with guide, 0, info; back beside a navigation cross. */
+  boomer: { name: "The Boomer", cols: 3, rows: 9, keys: [
+    [0, 0, C, "input"], [1, 0, C, "mute"], [2, 0, "red", "power"],
+    ...grid([0, 1, 2], [1, 2, 3, 4]).map(([c, r], i) => [c, r, C, (["digit_1", "digit_2", "digit_3", "digit_4", "digit_5", "digit_6", "digit_7", "digit_8", "digit_9", "guide", "digit_0", "info"] as const)[i]] as [number, number, CapColor, Fn]),
+    [0, 6, C, "back"], [1, 6, C, "up"], [0, 7, C, "left"], [1, 7, "light", "ok"], [2, 7, C, "right"], [1, 8, C, "down"],
+  ] },
+  /* A solid grid in the original Brick's proportions; its labels come from the layout. */
   brick: { name: "The Brick", cols: 3, rows: 6, keys: paint(grid([0, 1, 2], [0, 1, 2, 3, 4, 5]), 2, -1) },
   blank: { name: "Blank", cols: 3, rows: 6, keys: [] },
 };
+
+/** The functions a layout names, by cell ("col,row"). */
+export const layoutLabels = (l: Layout): Record<string, Fn> =>
+  Object.fromEntries(l.keys.filter((k) => k[3]).map(([c, r, , fn]) => [`${c},${r}`, fn!]));
 
 let serial = 0;
 export const newId = () => `k${++serial}-${Math.random().toString(36).slice(2, 6)}`;

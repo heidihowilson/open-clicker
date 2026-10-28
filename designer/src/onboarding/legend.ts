@@ -21,6 +21,18 @@ function icon(g: CanvasRenderingContext2D, fn: Fn): boolean {
     case "rewind": tri([[128, 98], [128, 158], [88, 128]]); tri([[168, 98], [168, 158], [128, 128]]); return true;
     case "fast_forward": tri([[88, 98], [88, 158], [128, 128]]); tri([[128, 98], [128, 158], [168, 128]]); return true;
     case "stop": g.fillRect(102, 102, 52, 52); return true;
+    case "settings": {
+      /* A gear: eight teeth around a ring. */
+      g.beginPath();
+      for (let i = 0; i < 16; i++) {
+        const a0 = (i * Math.PI) / 8 - Math.PI / 16, r = i % 2 ? 36 : 47;
+        g.arc(128, 128, r, a0, a0 + Math.PI / 8);
+      }
+      g.closePath();
+      g.moveTo(144, 128); g.arc(128, 128, 16, 0, Math.PI * 2, true);
+      g.fill("evenodd");
+      return true;
+    }
     case "custom": {
       /* A four-point sparkle: the person named this key in their own words. */
       g.beginPath();

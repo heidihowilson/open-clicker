@@ -5,8 +5,8 @@
   import { usd, type BomLine } from "../lib/bom";
   import { ROUTER_URL, routeBoard } from "../lib/router";
   import {
-    CAPS, cellX, cellZ, colAt, fromLayout, inside, LAYOUTS, live, MAX_COLS, MAX_KEYS, MAX_ROWS, minSize, newId, occupied,
-    quote, rowAt, shellRect, TIERS, toDesign, total, type CapColor, type Remote, type TierId,
+    CAPS, cellX, cellZ, colAt, fromLayout, inside, LAYOUTS, layoutLabels, live, MAX_COLS, MAX_KEYS, MAX_ROWS, minSize, newId, occupied,
+    quote, rowAt, shellRect, TIERS, toDesign, total, type CapColor, type Layout, type Remote, type TierId,
   } from "./model";
   import { RemoteScene } from "./scene";
   import { FUNCTION_NAMES, type Fn, type Label } from "./labels";
@@ -80,7 +80,7 @@
     scene.setStage(stageEl);
     scene.setRemote(remote);
     scene.setPpm(editPpm);
-    askLabels();
+    seed(LAYOUTS.streamer);
     scene.onFocus = (f) => (focus = f?.line ?? null);
     const t0 = setTimeout(() => (ready = true), 900);
     const iv = setInterval(check, 300);
@@ -92,7 +92,8 @@
   /* Labels follow the layout: every change asks Jev again. A key the person locked keeps its
    * label and goes to Jev as a fixed fact. `fresh` drops the locks too (a template, Design
    * another). The old labels stay on screen until the new answer arrives. */
-  type KeyLabel = Label & { locked?: boolean; hint?: string };
+  /* `preset`: the template named this key. It stays put like a lock, without the lock's dot. */
+  type KeyLabel = Label & { locked?: boolean; hint?: string; preset?: boolean };
   let labels = $state.raw<Record<string, KeyLabel>>({});
   function apply(r: Remote, stagger = false, fresh = false) {
     remote = r;
@@ -101,9 +102,15 @@
     setLabels(fresh ? {} : Object.fromEntries(Object.entries(labels).filter(([id]) => ids.has(id))));
     askLabels();
   }
+  /* A named template brings its keys' functions; the other keys are labelled from the layout. */
+  function seed(L: Layout) {
+    const by = layoutLabels(L);
+    setLabels(Object.fromEntries(live(remote).filter((k) => by[`${k.col},${k.row}`]).map((k) => [k.id, { fn: by[`${k.col},${k.row}`]!, confidence: 1, alts: [], locked: true, preset: true }])));
+    askLabels();
+  }
   function setLabels(next: Record<string, KeyLabel>) {
     labels = next;
-    scene?.setLabels(Object.fromEntries(Object.entries(next).map(([id, l]) => [id, { fn: l.fn, locked: !!l.locked }])));
+    scene?.setLabels(Object.fromEntries(Object.entries(next).map(([id, l]) => [id, { fn: l.fn, locked: !!l.locked && !l.preset }])));
   }
 
   let labelTimer = 0, labelTurn = 0;
@@ -142,7 +149,7 @@
     const l = labels[picker.id];
     if (!l) return;
     /* Unlocking hands the key back to Jev, so its words go too. */
-    setLabels({ ...labels, [picker.id]: l.locked ? { ...l, locked: false, hint: undefined } : { ...l, locked: true } });
+    setLabels({ ...labels, [picker.id]: l.locked ? { ...l, locked: false, hint: undefined, preset: false } : { ...l, locked: true } });
     picker = null;
     askLabels();
   }
@@ -192,6 +199,7 @@
   function again() {
     scene?.showParts(false);
     apply(fromLayout(LAYOUTS.streamer), false, true);
+    seed(LAYOUTS.streamer);
     screen = "intro"; moved = false; resized = false; keysLive = false; sizeLive = false; added = false; trayReady = false;
     template = null; templatesShown = false; makeShown = false; tier = null; acts = 0; email = ""; asking = false; focus = null;
   }
@@ -203,6 +211,7 @@
     for (const k of [...live(remote)].sort((a, b) => a.row - b.row || a.col - b.col)) pool[k.color].push(k.id);
     const keys = L.keys.map(([col, row, color]) => ({ id: pool[color].shift() ?? (color !== "charcoal" ? pool.charcoal.shift() : undefined) ?? newId(), col, row, color }));
     apply({ cols: L.cols, rows: L.rows, keys }, true, true);
+    seed(L);
     template = name; templatesShown = false; trayReady = true; keysLive = true; sizeLive = true; lastAct = Date.now();
   }
 

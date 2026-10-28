@@ -7,7 +7,7 @@ import { live, type CellKey, type Remote } from "./model";
 
 export const FUNCTION_NAMES = {
   power: "Power", up: "Up", down: "Down", left: "Left", right: "Right", ok: "OK",
-  back: "Back", home: "Home", menu: "Menu", input: "Input", info: "Info", guide: "Guide",
+  back: "Back", home: "Home", menu: "Menu", settings: "Settings", input: "Input", info: "Info", guide: "Guide",
   play_pause: "Play/pause", rewind: "Rewind", fast_forward: "Fast forward", stop: "Stop",
   volume_up: "Volume up", volume_down: "Volume down", mute: "Mute", channel_up: "Channel up", channel_down: "Channel down",
   digit_1: "1", digit_2: "2", digit_3: "3", digit_4: "4", digit_5: "5", digit_6: "6", digit_7: "7", digit_8: "8", digit_9: "9", digit_0: "0",

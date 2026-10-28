@@ -3,7 +3,7 @@ import { bom } from "../src/lib/bom";
 import { check, errorsIn } from "../src/lib/checks";
 import { parseDesign } from "../src/lib/design";
 import { netlist } from "../src/lib/netlist";
-import { fromLayout, LAYOUTS, live, MAX_KEYS, minSize, occupied, quote, shellRect, toDesign, total } from "../src/onboarding/model";
+import { fromLayout, LAYOUTS, layoutLabels, live, MAX_KEYS, minSize, occupied, quote, shellRect, toDesign, total } from "../src/onboarding/model";
 
 test("every layout fits one controller and has no errors", () => {
   for (const [name, l] of Object.entries(LAYOUTS)) {
@@ -26,7 +26,7 @@ test("keys outside the key area do not count and do not block cells", () => {
   const r = fromLayout(LAYOUTS.streamer);
   const small = { ...r, rows: 3 };
   expect(live(small).length).toBe(6);
-  expect(occupied(small, 0, 7)).toBe(false);
+  expect(occupied(small, 0, 5)).toBe(false);
   expect(minSize(r)).toEqual({ cols: 1, rows: 2 });
 });
 
@@ -39,8 +39,8 @@ test("prices rise from DIY to Complete and follow the key count", () => {
 });
 
 test("the shell keeps a bottom bay below the last row", () => {
-  const s = shellRect(fromLayout(LAYOUTS.streamer));
-  expect(s.maxZ - (7 * 17 + 8.5)).toBeGreaterThan(20);
+  const r = fromLayout(LAYOUTS.streamer), s = shellRect(r);
+  expect(s.maxZ - ((r.rows - 1) * 17 + 8.5)).toBeGreaterThan(20);
 });
 
 test("the onboarding's printed parts are black, not the studio's butter", () => {
@@ -48,4 +48,12 @@ test("the onboarding's printed parts are black, not the studio's butter", () => 
   expect(specs).toContain("Printed in black");
   expect(specs.toLowerCase()).not.toContain("butter");
   expect(specs).not.toContain("battery divider");
+});
+
+test("the named templates label every key, once each", () => {
+  for (const name of ["streamer", "boomer"] as const) {
+    const l = LAYOUTS[name], fns = Object.values(layoutLabels(l));
+    expect(fns.length).toBe(l.keys.length);
+    expect(new Set(fns).size).toBe(fns.length);
+  }
 });
