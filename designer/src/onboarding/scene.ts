@@ -2,7 +2,10 @@ import * as THREE from "three";
 import { boardBounds, SHELL_RULES, type Bounds } from "../lib/geometry";
 import { bom, usd, type BomId, type BomLine } from "../lib/bom";
 import { buildAssembly, buildKeycap, buildShell, buildSwitch, type Look, type PartInfo } from "../lib/parts";
-import { SHELL } from "../lib/parts-data";
+import { MBK, SHELL } from "../lib/parts-data";
+import { KEYCAPS } from "../lib/design";
+import type { Fn } from "./labels";
+import { legendTexture } from "./legend";
 import { addEdges, applyStyle } from "../lib/style";
 import { CAPS, cellX, cellZ, inside, SHELL_COLOR, toDesign, type Remote } from "./model";
 
@@ -18,7 +21,7 @@ const TILT = new THREE.Vector3(0.38, 1.15, 0.95).normalize();
 const TOP = new THREE.Vector3(0, 1, 0);
 const GAP_MM = 13;
 
-interface KeyObj { root: THREE.Group; pivot: THREE.Group; cap: THREE.Group; color: string; x: number; z: number; tx: number; tz: number; s: number; ts: number; lift: number; dead: boolean; delay: number; phase: number; dur: number; alt: boolean }
+interface KeyObj { root: THREE.Group; pivot: THREE.Group; cap: THREE.Group; legend: THREE.Mesh; color: string; x: number; z: number; tx: number; tz: number; s: number; ts: number; lift: number; dead: boolean; delay: number; phase: number; dur: number; alt: boolean }
 export interface FocusInfo { line: BomLine }
 
 function rnd(i: number, c: number) { const x = Math.sin((i + 1) * 12.9898 + c * 78.233) * 43758.5453; return x - Math.floor(x); }
@@ -111,8 +114,34 @@ export class RemoteScene {
     /* The switch stays put under the cap; only the cap wiggles. */
     const sw = buildSwitch(at); applyStyle(sw, "#000");
     pivot.add(cap); root.add(sw, pivot); this.edit.add(root);
-    return { root, pivot, cap, color, x: 0, z: 0, tx: 0, tz: 0, s: 0, ts: 1, lift: 0, dead: false, delay: 0,
+    /* The legend rides on the cap, so it wiggles with it. */
+    const legend = new THREE.Mesh(new THREE.PlaneGeometry(11, 11), new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }));
+    legend.rotation.x = -Math.PI / 2;
+    legend.position.y = MBK.seat + KEYCAPS["choc-mbk"].heightMm + 0.05;
+    legend.visible = false;
+    cap.add(legend);
+    const o: KeyObj = { root, pivot, cap, legend, color, x: 0, z: 0, tx: 0, tz: 0, s: 0, ts: 1, lift: 0, dead: false, delay: 0,
       phase: -rnd(i, 2), dur: 0.22 + rnd(i, 1) * 0.12, alt: i % 2 === 1 };
+    this.paintLegend(id, o);
+    return o;
+  }
+
+  /* ---------- legends ---------- */
+
+  private legends: Record<string, Fn> = {};
+  /** Show these functions on the caps; keys not listed are blank. */
+  setLabels(labels: Record<string, Fn>) {
+    this.legends = labels;
+    for (const [id, o] of this.keys) this.paintLegend(id, o);
+  }
+  private paintLegend(id: string, o: KeyObj) {
+    const fn = this.legends[id];
+    const material = o.legend.material as THREE.MeshBasicMaterial;
+    o.legend.visible = !!fn;
+    if (!fn) return;
+    const ink = o.color === CAPS.light.top ? "#1d1d1f" : o.color === CAPS.red.top ? "#ffffff" : "#d1d1d6";
+    material.map = legendTexture(fn, ink);
+    material.needsUpdate = true;
   }
   /** Live key area while the shell is being resized, in mm; null means the remote's own. */
   setLive(live: Bounds | null) {

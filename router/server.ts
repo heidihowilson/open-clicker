@@ -8,11 +8,19 @@ import { join } from "node:path";
 import { check, errorsIn } from "../designer/src/lib/checks";
 import { safeParseDesign, type Design } from "../designer/src/lib/design";
 import { buildBoard, type Report } from "./pipeline";
+import { plan, request as labelRequest, resolve, type Fn } from "../designer/src/onboarding/labels";
 
 const PORT = Number(process.env.PORT ?? 8790);
 const MAX_QUEUE = 6;
 const MAX_BODY = 64 * 1024;
 const KEEP_MS = 60 * 60 * 1000;
+const TYPESAFE_KEY = process.env.TYPESAFE_API_KEY ?? "";
+const RemoteSchema = z.object({
+  cols: z.number().int().min(1).max(12), rows: z.number().int().min(1).max(24),
+  keys: z.array(z.object({ id: z.string().max(40), col: z.number().int().min(0).max(11), row: z.number().int().min(0).max(23), color: z.enum(["charcoal", "light", "red"]) })).max(40),
+});
+/* Labels depend only on where the keys are and their colours, so cache by that. */
+const labelCache = new Map<string, Record<string, { fn: Fn; confidence: number }>>();
 const DATA_DIR = process.env.DATA_DIR ?? "/data";
 const NotifySchema = z.object({ email: z.string().trim().toLowerCase().email().max(200), tier: z.enum(["diy", "kit", "complete"]).nullable() });
 const lastNotify = new Map<string, number>();
@@ -78,6 +86,36 @@ Bun.serve({
       const job: Job = { id: crypto.randomUUID(), key, design, state: "queued", at: Date.now() };
       jobs.set(job.id, job); queue.push(job); void pump();
       return json(req, view(job), 202);
+    }
+
+    /* Key labels: code reads the layout, Jev picks among label sets (onboarding/labels.ts). */
+    if (req.method === "POST" && url.pathname === "/labels") {
+      let body: unknown;
+      try { body = JSON.parse(await req.text()); } catch { return json(req, { error: "The body is not JSON." }, 400); }
+      const parsed = RemoteSchema.safeParse(body);
+      if (!parsed.success) return json(req, { error: "Not a remote." }, 400);
+      const remote = parsed.data;
+      const inside = remote.keys.filter((k) => k.col < remote.cols && k.row < remote.rows);
+      const shape = JSON.stringify([remote.cols, remote.rows, inside.map((k) => [k.col, k.row, k.color]).sort()]);
+      let byCell = labelCache.get(shape);
+      if (!byCell) {
+        const p = plan(remote);
+        let answers = {};
+        if (TYPESAFE_KEY && (p.sections.length || p.blocks.length)) {
+          const res = await fetch("https://api.typesafe.ai/v1/systemone", {
+            method: "POST", signal: AbortSignal.timeout(4000),
+            headers: { authorization: `Bearer ${TYPESAFE_KEY}`, "content-type": "application/json" },
+            body: JSON.stringify({ model: "jev-latest", ...labelRequest(remote, p) }),
+          }).catch(() => null);
+          const out = res?.ok ? await res.json() as { answers?: Record<string, never> } : null;
+          if (out?.answers) answers = out.answers;
+        }
+        const labels = resolve(p, answers);
+        byCell = Object.fromEntries(inside.filter((k) => labels.has(k.id)).map((k) => [`${k.col},${k.row}`, labels.get(k.id)!]));
+        if (labelCache.size > 2000) labelCache.clear();
+        labelCache.set(shape, byCell);
+      }
+      return json(req, { labels: Object.fromEntries(inside.filter((k) => byCell[`${k.col},${k.row}`]).map((k) => [k.id, byCell[`${k.col},${k.row}`]])) });
     }
 
     /* "Notify me" for Kit and Complete until there is a shop: one JSON line per request. */

@@ -9,6 +9,7 @@
     quote, rowAt, shellRect, TIERS, toDesign, total, type CapColor, type Remote, type TierId,
   } from "./model";
   import { RemoteScene } from "./scene";
+  import type { Fn } from "./labels";
 
   type Screen = "intro" | "edit" | "buy" | "done";
   type Mode = "size" | "buttons" | null;
@@ -79,6 +80,7 @@
     scene.setStage(stageEl);
     scene.setRemote(remote);
     scene.setPpm(editPpm);
+    askLabels();
     scene.onFocus = (f) => (focus = f?.line ?? null);
     const t0 = setTimeout(() => (ready = true), 900);
     const iv = setInterval(check, 300);
@@ -87,7 +89,23 @@
     return () => { clearTimeout(t0); clearInterval(iv); removeEventListener("resize", onResize); scene?.dispose(); };
   });
 
-  function apply(r: Remote, stagger = false) { remote = r; scene?.setRemote(r, stagger); }
+  function apply(r: Remote, stagger = false) { remote = r; scene?.setRemote(r, stagger); askLabels(); }
+
+  /* Key labels: Jev, through the router, reads the layout a moment after each change.
+   * Only the latest answer is used; a failed call just leaves the caps blank. */
+  let labelTimer = 0, labelTurn = 0;
+  function askLabels() {
+    clearTimeout(labelTimer);
+    labelTimer = setTimeout(async () => {
+      const turn = ++labelTurn, sent = remote;
+      try {
+        const res = await fetch(`${ROUTER_URL}/labels`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(sent) });
+        const body = await res.json() as { labels?: Record<string, { fn: Fn; confidence: number }> };
+        if (turn !== labelTurn || !body.labels) return;
+        scene?.setLabels(Object.fromEntries(Object.entries(body.labels).filter(([, l]) => l.confidence >= 0.15).map(([id, l]) => [id, l.fn])));
+      } catch { /* blank caps are fine */ }
+    }, 250) as unknown as number;
+  }
   /* A change: resize release, key moved, key removed or key added (SPEC §2.3). */
   function commit() { acts += 1; lastAct = Date.now(); makeShown = false; templatesShown = false; }
   function check() {
