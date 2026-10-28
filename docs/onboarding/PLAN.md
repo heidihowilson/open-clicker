@@ -11,6 +11,8 @@ That moment is the point of the page: the visitor sees that this is an open desi
 
 ## Status
 
+2026-10-28: the opening asks "Design your own TV remote." with **Make it mine** (edit) and **It's perfect** (straight to Build or Buy); "Good remote?" confused first testers.
+
 2026-10-28, owner decisions: keep to what one XIAO ESP32-C6 scans (21 keys, so battery-level reporting is off and The Boomer and The Brick are cut to fit, The Brick as a solid 3 × 6 grid); keep the bottom bay for the electronics; DIY gets the files, Kit and Complete collect an email. Steps 1–5 and the files/notify half of step 6 shipped the same day. The keypad-scanner chip is not used.
 
 ## 1. What we keep from the prototype

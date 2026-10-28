@@ -22,7 +22,6 @@
   let vw = $state(innerWidth), vh = $state(innerHeight);
   let screen = $state<Screen>("intro");
   let ready = $state(false);
-  let answer = $state<"yes" | "no" | null>(null);
   let mode = $state<Mode>(null);
   let keysLive = $state(false), sizeLive = $state(false);
   let remote = $state.raw<Remote>(fromLayout(LAYOUTS.streamer));
@@ -95,7 +94,7 @@
   }
 
   /* ---- flow ---- */
-  function choose(yes: boolean) { screen = "edit"; answer = yes ? "yes" : "no"; mode = null; }
+  function edit() { screen = "edit"; mode = null; }
   function pick(m: Exclude<Mode, null>) {
     mode = m; lastAct = Date.now(); acts = 0;
     if (m === "size") sizeLive = true; else keysLive = true;
@@ -108,7 +107,7 @@
   function again() {
     scene?.showParts(false);
     apply(fromLayout(LAYOUTS.streamer));
-    screen = "intro"; answer = null; mode = null; keysLive = false; sizeLive = false; added = false; trayReady = false;
+    screen = "intro"; mode = null; keysLive = false; sizeLive = false; added = false; trayReady = false;
     template = null; templatesShown = false; makeShown = false; tier = null; acts = 0; email = ""; asking = false; focus = null;
   }
 
@@ -268,10 +267,9 @@
 <div class="root" class:editing={isEdit} style={`padding-bottom:${!trayInline && trayOn ? 150 : 40}px`}>
   <div class="head">
     {#if screen === "intro" && ready}
-      <h1 class="rise h1">Good remote?</h1>
-    {:else if isEdit && answer === "yes"}
-      <h1 class="rise h1">Would you change anything?</h1>
-    {:else if isEdit && answer === "no"}
+      <h1 class="rise h1">Design your own TV remote.</h1>
+      <p class="rise d1 sub">Open source. Start from this one.</p>
+    {:else if isEdit}
       <h1 class="rise h1">What would you change?</h1>
     {:else if screen === "buy"}
       <h1 class="rise h1">How do you want it?</h1>
@@ -328,8 +326,8 @@
 
     {#if screen === "intro" && ready}
       <div class="rise d1 row">
-        <button type="button" class="btn primary" onclick={() => choose(true)}>Yes</button>
-        <button type="button" class="btn ghost" onclick={() => choose(false)}>No</button>
+        <button type="button" class="btn primary" onclick={edit}>Make it mine</button>
+        <button type="button" class="btn ghost" onclick={makeOrBuy}>It's perfect</button>
       </div>
     {/if}
     {#if isEdit && !mode}
