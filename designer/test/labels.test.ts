@@ -17,14 +17,19 @@ test("a cross touched by another key is still found", () => {
   expect(fnAt(r, labels, 1, 6)).toBe("up");
 });
 
-test("a plain 3 × 3 block is a candidate number pad, not a cross", () => {
+test("a compact remote is never offered a number pad", () => {
   const keys = Array.from({ length: 9 }, (_, i) => ({ id: `k${i}`, col: i % 3, row: Math.floor(i / 3), color: "charcoal" as const }));
-  const p = plan({ cols: 3, rows: 4, keys });
+  expect(plan({ cols: 3, rows: 4, keys }).blocks.length).toBe(0);
+});
+
+test("on a full-size remote a plain block is a candidate number pad, not a cross", () => {
+  const keys = Array.from({ length: 18 }, (_, i) => ({ id: `k${i}`, col: i % 3, row: Math.floor(i / 3), color: "charcoal" as const }));
+  const p = plan({ cols: 3, rows: 6, keys });
   expect(p.fixed.size).toBe(0);
   expect(p.blocks.length).toBe(1);
   const labels = resolve(p, { [`b:${p.blocks[0]!.id}`]: { probabilities: { number_pad: 0.9, separate_rows: 0.1 } } });
-  expect(fnAt({ cols: 3, rows: 4, keys }, labels, 0, 0)).toBe("digit_1");
-  expect(fnAt({ cols: 3, rows: 4, keys }, labels, 2, 2)).toBe("digit_9");
+  expect(fnAt({ cols: 3, rows: 6, keys }, labels, 0, 0)).toBe("digit_1");
+  expect(fnAt({ cols: 3, rows: 6, keys }, labels, 2, 2)).toBe("digit_9");
 });
 
 test("no function is used twice; a later section falls back to its next choice", () => {

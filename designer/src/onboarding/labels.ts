@@ -26,14 +26,17 @@ const ROWS: Record<number, Candidate[]> = {
     { id: "home", about: "Home", labels: ["home"] }, { id: "back", about: "Back", labels: ["back"] },
     { id: "menu", about: "Menu", labels: ["menu"] }, { id: "input", about: "Input or source", labels: ["input"] },
     { id: "mute", about: "Mute", labels: ["mute"] }, { id: "play", about: "Play/pause", labels: ["play_pause"] },
-    { id: "app", about: "A streaming app shortcut", labels: ["app"] },
+    { id: "netflix", about: "A Netflix key", labels: ["netflix"] },
+    { id: "settings", about: "Settings", labels: ["settings"] },
   ],
   2: [
     { id: "volume", about: "Volume down, volume up", labels: ["volume_down", "volume_up"] },
     { id: "channel", about: "Channel down, channel up", labels: ["channel_down", "channel_up"] },
     { id: "back_home", about: "Back, home", labels: ["back", "home"] },
     { id: "rew_ff", about: "Rewind, fast forward", labels: ["rewind", "fast_forward"] },
-    { id: "apps", about: "Two streaming app shortcuts", labels: ["app", "app"] },
+    { id: "apps", about: "Two streaming app keys: Netflix, YouTube", labels: ["netflix", "youtube"] },
+    { id: "back_settings", about: "Back, settings", labels: ["back", "settings"] },
+    { id: "input_mute", about: "Input, mute", labels: ["input", "mute"] },
   ],
   3: [
     { id: "transport", about: "Rewind, play/pause, fast forward", labels: ["rewind", "play_pause", "fast_forward"] },
@@ -41,12 +44,13 @@ const ROWS: Record<number, Candidate[]> = {
     { id: "sound", about: "Volume down, mute, volume up", labels: ["volume_down", "mute", "volume_up"] },
     { id: "channels", about: "Channel down, guide, channel up", labels: ["channel_down", "guide", "channel_up"] },
     { id: "extras", about: "Input, info, mute", labels: ["input", "info", "mute"] },
-    { id: "apps", about: "Three streaming app shortcuts", labels: ["app", "app", "app"] },
+    { id: "apps", about: "Three streaming app keys: Netflix, YouTube, Disney+", labels: ["netflix", "youtube", "disney_plus"] },
+    { id: "back_home_settings", about: "Back, home, settings", labels: ["back", "home", "settings"] },
   ],
   4: [
     { id: "transport", about: "Rewind, play/pause, stop, fast forward", labels: ["rewind", "play_pause", "stop", "fast_forward"] },
     { id: "system", about: "Back, home, menu, input", labels: ["back", "home", "menu", "input"] },
-    { id: "apps", about: "Four streaming app shortcuts", labels: ["app", "app", "app", "app"] },
+    { id: "apps", about: "Four streaming app keys: Netflix, YouTube, Disney+, Prime Video", labels: ["netflix", "youtube", "disney_plus", "prime_video"] },
   ],
 };
 /* What a second red key usually is on a TV remote. */
@@ -64,8 +68,17 @@ const NUMPAD: Record<number, Fn[]> = {
 const NEAR = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
 const order = (a: CellKey, b: CellKey) => a.row - b.row || a.col - b.col;
 
+/* What a remote of this size is for. A small remote is a streaming stick's, so receiver,
+ * channel and number keys are out of scope; a big one is a full TV or home-theatre remote. */
+export function scope(r: Remote): { size: "compact" | "standard" | "full"; about: string } {
+  const n = live(r).length;
+  if (n <= 12) return { size: "compact", about: "It is a compact streaming remote, like a Roku, Fire TV or Apple TV remote: navigation, back, home, settings, play/pause, volume and a few streaming app keys. Number pads, channels, guide, input and audio receiver controls do not belong on it." };
+  if (n <= 17) return { size: "standard", about: "It is a mid-size smart TV remote: navigation, back, home, volume, mute, playback and a few streaming app keys, maybe channels. It usually has no number pad." };
+  return { size: "full", about: "It is a full-size TV or home theatre remote: a number pad, channels, guide, input, playback, volume and audio receiver controls all belong on it." };
+}
+
 /** Fixed labels need no judgment: the red key and a cross of five. */
-export interface Plan { fixed: Map<string, Fn>; sections: Section[]; blocks: { id: string; keys: CellKey[]; rows: string[]; about: string }[] }
+export interface Plan { size: ReturnType<typeof scope>["size"]; fixed: Map<string, Fn>; sections: Section[]; blocks: { id: string; keys: CellKey[]; rows: string[]; about: string }[] }
 
 /** `known` holds labels the keys already carry (chosen by the person or labelled earlier).
  * They are kept as they are; only the other keys are planned. */
@@ -157,7 +170,7 @@ export function plan(r: Remote, known: Partial<Record<string, Fn>> = {}, hints: 
     /* A run of 3 or 4 consecutive full rows, 3 keys wide, may be a number pad instead of
      * separate rows. Take the first such run in the group, as long as it can be. */
     const full = rows.filter((row) => { const ks = g.filter((k) => k.row === row); return ks.length === 3 && Math.max(...ks.map((k) => k.col)) - Math.min(...ks.map((k) => k.col)) === 2; });
-    for (let i = 0; i < full.length; i++) {
+    for (let i = 0; scope(r).size !== "compact" && i < full.length; i++) {
       let n = 1;
       while (i + n < full.length && full[i + n] === full[i]! + n && n < 4) n++;
       if (n < 3) continue;
@@ -166,14 +179,14 @@ export function plan(r: Remote, known: Partial<Record<string, Fn>> = {}, hints: 
       break;
     }
   }
-  return { fixed, sections, blocks };
+  return { size: scope(r).size, fixed, sections, blocks };
 }
 
 /** The Jev request: one Choice per section and per block, all in one call. */
 export function request(r: Remote, p: Plan) {
   const fixed = [...p.fixed.values()].filter((f) => f !== "custom");
   const state = {
-    remote: `A TV remote with ${live(r).length} blank keys in ${r.rows} rows. A person laid it out to look like a familiar TV remote.`,
+    remote: `A TV remote with ${live(r).length} blank keys in ${r.rows} rows. A person laid it out to look like a familiar TV remote. ${scope(r).about}`,
     already_known: fixed.length ? `These keys are already labelled: ${[...new Set(fixed)].map((f) => FUNCTION_NAMES[f]).join(", ")}.` : "No key is labelled yet.",
     sections: p.sections.map((s) => s.about),
     blocks: p.blocks.map((b) => b.about),
@@ -206,7 +219,7 @@ type Answers = Record<string, { choice?: string; probabilities?: Record<string, 
 
 /** Turn Jev's answers into one label per key: numbers first where a block is a number pad,
  * then each section's likeliest set whose functions are still free (apps may repeat). */
-export function resolve(p: Plan, answers: Answers, threshold = 0.5): Map<string, Label> {
+export function resolve(p: Plan, answers: Answers, threshold = p.size === "full" ? 0.35 : 0.5): Map<string, Label> {
   const out = new Map<string, Label>();
   const used = new Set<Fn>();
   for (const [id, fn] of p.fixed) { out.set(id, { fn, confidence: 1, alts: [] }); used.add(fn); }
