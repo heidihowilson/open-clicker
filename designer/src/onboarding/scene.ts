@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { boardBounds, SHELL_RULES, type Bounds } from "../lib/geometry";
 import { bom, usd, type BomId, type BomLine } from "../lib/bom";
-import { buildAssembly, buildKeycap, buildShell, type Look, type PartInfo } from "../lib/parts";
+import { buildAssembly, buildKeycap, buildShell, buildSwitch, type Look, type PartInfo } from "../lib/parts";
 import { SHELL } from "../lib/parts-data";
 import { addEdges, applyStyle } from "../lib/style";
 import { CAPS, cellX, cellZ, inside, SHELL_COLOR, toDesign, type Remote } from "./model";
@@ -13,6 +13,8 @@ import { CAPS, cellX, cellZ, inside, SHELL_COLOR, toDesign, type Remote } from "
 
 const EASE = (t: number) => 1 - Math.pow(1 - t, 3);
 const ISO = new THREE.Vector3(0.9, 1.25, 1.35).normalize();
+/* The first screen shows the remote as an object on a table, then it settles flat to edit. */
+const TILT = new THREE.Vector3(0.38, 1.15, 0.95).normalize();
 const TOP = new THREE.Vector3(0, 1, 0);
 const GAP_MM = 13;
 
@@ -45,6 +47,9 @@ export class RemoteScene {
   private live: Bounds | null = null;
   private serial = 0;
   ppm = 3;
+  /** 1 shows the remote tilted like an object on a table; 0 is straight down. */
+  tiltTarget = 0;
+  private tilt = 0;
   private radius = 80;
   /** The page sets this; the camera eases toward it. */
   ppmTarget = 3;
@@ -103,7 +108,9 @@ export class RemoteScene {
     /* An off-centre pivot near the top of the cap, as SPEC §4.1 asks. */
     const px = (rnd(i, 3) * 0.4 - 0.2) * 17.5, pz = (-0.5 + 0.05 + rnd(i, 4) * 0.1) * 16.5;
     pivot.position.set(px, 0, pz); cap.position.set(-px, 0, -pz);
-    pivot.add(cap); root.add(pivot); this.edit.add(root);
+    /* The switch stays put under the cap; only the cap wiggles. */
+    const sw = buildSwitch(at); applyStyle(sw, "#000");
+    pivot.add(cap); root.add(sw, pivot); this.edit.add(root);
     return { root, pivot, cap, color, x: 0, z: 0, tx: 0, tz: 0, s: 0, ts: 1, lift: 0, dead: false, delay: 0,
       phase: -rnd(i, 2), dur: 0.22 + rnd(i, 1) * 0.12, alt: i % 2 === 1 };
   }
@@ -121,9 +128,28 @@ export class RemoteScene {
     const shell = new THREE.Group();
     shell.add(parts.lid, parts.plate, parts.shell);
     applyStyle(shell, "#000");
+    shell.add(this.shadow(b));
     if (this.body) { this.edit.remove(this.body); this.dispose3d(this.body); }
     this.body = shell; this.edit.add(shell);
     this.center.set((b.minX + b.maxX) / 2, 0, (b.minY + b.maxY) / 2);
+  }
+  /* A soft contact shadow under the lid, a little toward the viewer, like the prototype's. */
+  private shadowTex: THREE.CanvasTexture | null = null;
+  private shadow(b: Bounds): THREE.Mesh {
+    if (!this.shadowTex) {
+      const c = document.createElement("canvas"); c.width = c.height = 128;
+      const g = c.getContext("2d")!;
+      const grad = g.createRadialGradient(64, 64, 20, 64, 64, 64);
+      grad.addColorStop(0, "rgba(0,0,0,0.42)"); grad.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
+      this.shadowTex = new THREE.CanvasTexture(c);
+    }
+    const w = b.maxX - b.minX + 40, h = b.maxY - b.minY + 40;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: this.shadowTex, transparent: true, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2;
+    m.position.set((b.minX + b.maxX) / 2, -14, (b.minY + b.maxY) / 2 + 6);
+    m.renderOrder = -1;
+    return m;
   }
   /** Shell outer size in mm for a key area (for the page to size the stage). */
   static outer(b: Bounds) { const g = SHELL_RULES.wall + SHELL.clearance; return { w: b.maxX - b.minX + 2 * g, h: b.maxY - b.minY + 2 * g }; }
@@ -264,9 +290,12 @@ export class RemoteScene {
       this.layout(t);
       if (this.explode < 0.002 && this.explodeTarget === 0 && this.assembly.visible) { this.assembly.visible = false; this.edit.visible = true; for (const p of this.pills) p.el.remove(); this.pills = []; }
     }
-    this.dir.copy(TOP).lerp(ISO, t).normalize();
-    if (t < 0.001) this.dir.set(0, 1, 0.0001).normalize();
-    this.up.set(0, 0, -1).lerp(new THREE.Vector3(0, 1, 0), t).normalize();
+    this.tilt += (this.tiltTarget - this.tilt) * 0.05;
+    const tilt = EASE(Math.min(1, Math.max(0, this.tilt)));
+    const tilted = TILT.clone().applyAxisAngle(TOP, Math.sin(now / 1600) * 0.18);
+    this.dir.copy(TOP).lerp(tilted, tilt).lerp(ISO, t).normalize();
+    if (t < 0.001 && tilt < 0.001) this.dir.set(0, 1, 0.0001).normalize();
+    this.up.set(0, 0, -1).lerp(new THREE.Vector3(0, 1, 0), Math.max(t, tilt)).normalize();
     this.zoom += (this.zoomTarget - this.zoom) * 0.12;
     this.ppm = Math.abs(this.ppmTarget - this.ppm) < 0.002 ? this.ppmTarget : this.ppm + (this.ppmTarget - this.ppm) * 0.12;
 

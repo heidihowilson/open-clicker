@@ -68,9 +68,11 @@
     if (!scene) return;
     if (screen === "buy" || screen === "done") scene.ppmTarget = scene.explodedFit(stage.w, stage.h);
     else if (resizing) scene.setPpm(frozenPpm);
-    else scene.ppmTarget = editPpm;
+    /* Tilted, the remote spans its diagonal, so the first screen shows it a little smaller. */
+    else scene.ppmTarget = screen === "intro" ? editPpm * (vw < 760 ? 0.6 : 0.85) : editPpm;
   });
   $effect(() => { if (scene) scene.jiggle = keysOn; });
+  $effect(() => { if (scene) scene.tiltTarget = screen === "intro" ? 1 : 0; });
 
   onMount(() => {
     scene = new RemoteScene(canvasHost, labelHost);
@@ -268,7 +270,7 @@
   <div class="head">
     {#if screen === "intro" && ready}
       <h1 class="rise h1">Design your own TV remote.</h1>
-      <p class="rise d1 sub">Open source. Start from this one.</p>
+      <p class="rise d1 sub">Low-profile Choc switches, hot-swap, your layout. Open source.</p>
     {:else if isEdit}
       <h1 class="rise h1">What would you change?</h1>
     {:else if screen === "buy"}
@@ -338,6 +340,8 @@
     {/if}
     {#if isEdit && makeShown}
       <button type="button" class="btn primary rise" onclick={makeOrBuy}>Build or Buy</button>
+    {:else if isEdit && count > 0}
+      <button type="button" class="link rise" onclick={makeOrBuy}>Build or Buy</button>
     {/if}
     {#if isEdit && acts > 0 && !templatesShown}
       <button type="button" class="link rise" onclick={() => (templatesShown = true)}>Start Over</button>
