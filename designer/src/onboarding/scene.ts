@@ -211,7 +211,13 @@ export class RemoteScene {
     if (on && this.remote) {
       const d = toDesign(this.remote);
       if (this.assembly) { this.scene.remove(this.assembly); this.dispose3d(this.assembly); }
-      this.assembly = buildAssembly(d, this.look(this.remote));
+      /* The exploded caps carry the same legends as the editor's. */
+      const look = this.look(this.remote);
+      look.legends = Object.fromEntries(Object.entries(this.legends).map(([id, fn]) => {
+        const color = look.caps[id];
+        return [id, legendTexture(fn, color === CAPS.light.top ? "#1d1d1f" : color === CAPS.red.top ? "#ffffff" : "#d1d1d6")];
+      }));
+      this.assembly = buildAssembly(d, look);
       addEdges(this.assembly);
       applyStyle(this.assembly, "#d1d1d6");
       this.scene.add(this.assembly);

@@ -21,7 +21,7 @@ export interface PartInfo { layer: number; label: string; detail: string }
 
 /** Colours for a build that is not in the brand colourway: the onboarding's black shell and
  * per-key cap colours, with no wordmark and no legends. */
-export interface Look { shell: string; caps: Record<string, string> }
+export interface Look { shell: string; caps: Record<string, string>; legends?: Record<string, THREE.Texture> }
 
 function tintRole(root: THREE.Object3D, role: Role, color: string) {
   root.traverse((o) => { if (o.userData.role === role) o.userData.tint = color; });
@@ -151,7 +151,7 @@ function legendTexture(key: Key): THREE.CanvasTexture {
   return t;
 }
 
-export function buildKeycap(design: Design, key: Key, tint?: string): THREE.Group {
+export function buildKeycap(design: Design, key: Key, tint?: string, legendMap?: THREE.Texture): THREE.Group {
   const cap = KEYCAPS[design.keycap];
   const width = capWidth(key.w);
   const g = new THREE.Group();
@@ -163,8 +163,15 @@ export function buildKeycap(design: Design, key: Key, tint?: string): THREE.Grou
   g.add(body);
   /* Two stem sockets under the cap. */
   for (const sx of [-1, 1]) g.add(box(CHOC.stem.width + 1.2, 1.2, CHOC.stem.depth + 1.2, "cap", (sx * CHOC.stem.spacing) / 2, -0.6, 0));
-  if (tint) for (const m of g.children) m.userData.tint = tint;
-  else {
+  if (tint) {
+    for (const m of g.children) m.userData.tint = tint;
+    if (legendMap) {
+      const legend = new THREE.Mesh(new THREE.PlaneGeometry(11, 11), new THREE.MeshBasicMaterial({ map: legendMap, transparent: true, depthWrite: false }));
+      legend.rotation.x = -Math.PI / 2; legend.position.y = cap.heightMm + 0.05;
+      legend.userData.legend = true;
+      g.add(legend);
+    }
+  } else {
     const legend = new THREE.Mesh(new THREE.PlaneGeometry(cap.depthMm * 0.8 * key.w, cap.depthMm * 0.8),
       new THREE.MeshBasicMaterial({ map: legendTexture(key), transparent: true, depthWrite: false }));
     legend.rotation.x = -Math.PI / 2; legend.position.y = cap.heightMm + 0.02;
@@ -353,7 +360,7 @@ export function buildAssembly(design: Design, look?: Look): THREE.Group {
   const shell = buildShell(design, bounds, look);
   const switches = part({ layer: 4, label: label("switch"), detail: describe(lines, ["switch"]) });
   const caps = part({ layer: 6, label: label("keycap"), detail: describe(lines, ["keycap"]) });
-  for (const key of design.keys) { switches.add(buildSwitch(key)); caps.add(buildKeycap(design, key, look?.caps[key.id])); }
+  for (const key of design.keys) { switches.add(buildSwitch(key)); caps.add(buildKeycap(design, key, look?.caps[key.id], look?.legends?.[key.id])); }
   const back = buildDiodes(design);
   const divider = buildDivider(design, bounds);
   if (divider) back.add(...divider.children);

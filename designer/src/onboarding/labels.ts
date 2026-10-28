@@ -46,6 +46,13 @@ const ROWS: Record<number, Candidate[]> = {
     { id: "apps", about: "Four streaming app shortcuts", labels: ["app", "app", "app", "app"] },
   ],
 };
+/* What a second red key usually is on a TV remote. */
+const RED_EXTRA: Candidate[] = [
+  { id: "app", about: "A streaming app shortcut, like the red Netflix or YouTube key", labels: ["app"] },
+  { id: "stop", about: "Stop playback", labels: ["stop"] },
+  { id: "mute", about: "Mute", labels: ["mute"] },
+  { id: "input", about: "Input or source", labels: ["input"] },
+];
 const NUMPAD: Record<number, Fn[]> = {
   3: ["digit_1", "digit_2", "digit_3", "digit_4", "digit_5", "digit_6", "digit_7", "digit_8", "digit_9"],
   4: ["digit_1", "digit_2", "digit_3", "digit_4", "digit_5", "digit_6", "digit_7", "digit_8", "digit_9", "guide", "digit_0", "info"],
@@ -64,8 +71,14 @@ export function plan(r: Remote): Plan {
     return mid < 0.34 ? "near the top" : mid > 0.66 ? "near the bottom" : "in the middle";
   };
 
-  for (const k of ks) if (k.color === "red") fixed.set(k.id, "power");
-  const rest = ks.filter((k) => !fixed.has(k.id));
+  /* The first red key (reading order) is power. Another red key is something else red keys
+   * are used for, chosen by Jev like any single key. */
+  const reds = ks.filter((k) => k.color === "red").sort(order);
+  if (reds[0]) fixed.set(reds[0].id, "power");
+  for (const k of reds.slice(1)) {
+    sections.push({ id: `red${k.row}c${k.col}`, keys: [k], about: `a single red key, row ${k.row + 1} of ${r.rows}, ${where([k.row])}; the remote's power key is a different red key`, candidates: RED_EXTRA });
+  }
+  const rest = ks.filter((k) => k.color !== "red");
 
   /* Connected groups of the remaining keys. */
   const seen = new Set<string>(), groups: CellKey[][] = [];
