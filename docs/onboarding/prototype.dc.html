@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Open Clicker — first visit</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f5f5f7}
+a{color:#0071e3}a:hover{color:#0058b8}
+*:focus-visible{outline:2px solid #0071e3;outline-offset:3px}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes enter{from{opacity:0;transform:translateY(18px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+/* iOS-style: asymmetric rotation about an off-center pivot, ease-in then ease-out, alternating */
+@keyframes jiggleA{0%{transform:rotate(-1.4deg);animation-timing-function:ease-in}50%{transform:rotate(2deg);animation-timing-function:ease-out}100%{transform:rotate(-1.4deg)}}
+@keyframes jiggleB{0%{transform:rotate(1.4deg);animation-timing-function:ease-in}50%{transform:rotate(-2deg);animation-timing-function:ease-out}100%{transform:rotate(1.4deg)}}
+.rise{animation:rise .75s cubic-bezier(.2,.8,.2,1) both}
+.d1{animation-delay:.1s}.d2{animation-delay:.22s}.d3{animation-delay:.34s}
+.enter{animation:enter 1.1s cubic-bezier(.2,.8,.2,1) both}
+.btn{height:46px;padding:0 24px;border-radius:23px;border:0;font:inherit;font-size:15px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:transform .15s,background .2s,box-shadow .2s;min-width:92px}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:#1d1d1f;color:#fff}.btn.primary:hover{background:#000}
+.btn.ghost{background:#fff;color:#1d1d1f;box-shadow:0 0 0 1px rgba(0,0,0,.14) inset}.btn.ghost:hover{box-shadow:0 0 0 1px rgba(0,0,0,.3) inset}
+.link{background:none;border:0;font:inherit;font-size:14px;color:#6e6e73;cursor:pointer;padding:10px 12px;border-radius:10px;min-height:44px}.link:hover{color:#1d1d1f}
+.editing{user-select:none;-webkit-user-select:none}
+/* keys */
+.kw.live .key{cursor:grab}
+.kw.dragging{z-index:6}
+.kw.dragging .key{cursor:grabbing;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 rgba(0,0,0,.45),0 12px 22px -6px rgba(0,0,0,.8)}
+.keys-live .jig{animation-name:jiggleA;animation-iteration-count:infinite}
+.keys-live .kw.alt .jig{animation-name:jiggleB;animation-direction:alternate}
+.kw.dragging .jig,.kw.dead .jig{animation:none}
+/* grabbers */
+.grab{position:absolute;border:0;padding:0;margin:0;background:#48484a;border-radius:2px;cursor:ns-resize;touch-action:none;opacity:0;transition:opacity .6s,background .2s,transform .6s cubic-bezier(.2,.8,.2,1),left .5s cubic-bezier(.2,.8,.2,1),top .5s cubic-bezier(.2,.8,.2,1);z-index:5}
+.grab::after{content:"";position:absolute;inset:-14px}
+.grab.x{cursor:ew-resize}
+.grab:hover{background:#8e8e93}
+.resizing .grab{transition:opacity .6s,background .2s}
+.resizing .grab.on{background:#d1d1d6}
+.size-live .grab{opacity:1}
+/* templates */
+.tpl{background:none;border:0;padding:12px 10px 10px;margin:0;font:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:12px;border-radius:18px;transition:background .25s,transform .3s cubic-bezier(.2,.8,.2,1)}
+.tpl:hover{background:rgba(0,0,0,.05);transform:translateY(-2px)}
+.tpl:active{transform:scale(.97)}
+.tpl.on{background:rgba(0,0,0,.07)}
+.panel{position:fixed;z-index:20;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.06),0 24px 60px -24px rgba(0,0,0,.35);display:flex;flex-direction:column;align-items:center;gap:8px;transition:transform .6s cubic-bezier(.2,.8,.2,1),opacity .4s;will-change:transform}
+.panel.side{left:24px;top:50%;border-radius:24px;padding:18px 16px 10px;transform:translate(calc(-100% - 40px),-50%);opacity:0}
+.tray{display:flex;flex-direction:column;align-items:center;gap:10px;pointer-events:none;opacity:0}
+.tray.open{pointer-events:auto;opacity:1}
+.tray.inline{transition:height .5s cubic-bezier(.2,.8,.2,1),opacity .4s;width:100%}
+.tray.sheet{position:fixed;left:0;right:0;bottom:0;z-index:19;background:#fff;border-radius:24px 24px 0 0;box-shadow:0 0 0 1px rgba(0,0,0,.06),0 -16px 48px -24px rgba(0,0,0,.3);padding:10px 16px calc(16px + env(safe-area-inset-bottom));transform:translateY(110%);transition:transform .6s cubic-bezier(.2,.8,.2,1),opacity .4s}
+.tray.sheet.open{transform:translateY(0)}
+.slots{display:flex;gap:16px;justify-content:center;align-items:center}
+.slot{position:relative}
+.outline{position:absolute;left:0;top:0;width:32px;height:32px;box-sizing:border-box;border-radius:5px;border:1.5px dashed #aeaeb2;transform-origin:top left;transition:opacity .3s}
+.spare{position:absolute;left:0;top:0;width:32px;height:32px;border-radius:5px;border:0;padding:0;margin:0;display:block;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 rgba(0,0,0,.45),0 1px 0 rgba(0,0,0,.6);font:inherit;cursor:grab;touch-action:none;transform-origin:top left;z-index:21}
+.panel.side.open{transform:translate(0,-50%);opacity:1}
+.panel.sheet{left:0;right:0;bottom:0;border-radius:24px 24px 0 0;padding:10px 16px calc(14px + env(safe-area-inset-bottom));transform:translateY(110%)}
+.panel.sheet.open{transform:translateY(0)}
+.pill{width:36px;height:5px;border-radius:3px;background:#d1d1d6}
+/* buying */
+.card{transition:transform .3s cubic-bezier(.2,.8,.2,1),box-shadow .3s;box-shadow:0 0 0 1px rgba(0,0,0,.06),0 14px 32px -22px rgba(0,0,0,.25)}
+.card:hover{transform:translateY(-3px);box-shadow:0 0 0 1px rgba(0,0,0,.1),0 20px 40px -22px rgba(0,0,0,.3)}
+.card.on,.card.on:hover{box-shadow:0 0 0 2px #1d1d1f,0 20px 40px -22px rgba(0,0,0,.3)}
+.row{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-top:1px solid rgba(0,0,0,.07);font-size:14px}
+.row:first-child{border-top:0}
+.opt{display:flex;align-items:center;gap:14px;width:100%;padding:14px 18px;border:0;background:none;font:inherit;text-align:left;cursor:pointer;color:#1d1d1f;border-top:1px solid rgba(0,0,0,.07);transition:background .2s}
+.opt:first-child{border-top:0}
+.opt:hover{background:rgba(0,0,0,.025)}
+.radio{flex:none;width:20px;height:20px;border-radius:50%;box-shadow:0 0 0 1.5px #c7c7cc inset;display:flex;align-items:center;justify-content:center;color:#fff;transition:background .2s,box-shadow .2s}
+.opt.on .radio{background:#1d1d1f;box-shadow:0 0 0 1.5px #1d1d1f inset}
+.h1{margin:0;font-size:clamp(26px,7vw,34px);font-weight:600;letter-spacing:-.02em;line-height:1.15}
+.tab{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1d1d1f;color:#fff}
+</style>
+</helmet>
+<div class="root {{rootCls}}" style="min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 40px 16px {{padB}}px; background: #f5f5f7; color: #1d1d1f; font-family: Geist, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased">
+
+  <div class="head" style="min-height: 88px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 10px; text-align: center; max-width: 560px">
+    <sc-if value="{{introQ}}" hint-placeholder-val="{{true}}">
+      <h1 class="rise h1">Good remote?</h1>
+    </sc-if>
+    <sc-if value="{{isEditYes}}" hint-placeholder-val="{{false}}">
+      <h1 class="rise h1">Would you change anything?</h1>
+    </sc-if>
+    <sc-if value="{{isEditNo}}" hint-placeholder-val="{{false}}">
+      <h1 class="rise h1">What would you change?</h1>
+    </sc-if>
+    <sc-if value="{{isBuy}}" hint-placeholder-val="{{false}}">
+      <h1 class="rise h1">How do you want it?</h1>
+    </sc-if>
+    <sc-if value="{{isDone}}" hint-placeholder-val="{{false}}">
+      <h1 class="rise h1">Ordered.</h1>
+      <p class="rise d1" style="margin: 0; font-size: 15px; color: #6e6e73">{{orderName}} · ${{orderTotal}}</p>
+    </sc-if>
+  </div>
+
+  <div class="stage enter" style="margin: 28px 0 28px; position: relative; width: {{stageW}}px; height: {{stageH}}px; transition: {{stageTrans}}">
+    <div class="remote" data-remote="1" style="position: absolute; left: 0; top: 0; width: {{W}}px; height: {{H}}px; border-radius: 26px; background: #161618; box-shadow: 0 1px 0 rgba(255,255,255,0.07) inset, 0 0 0 1px rgba(0,0,0,0.5), 0 30px 60px -22px rgba(0,0,0,0.5), 0 10px 20px -10px rgba(0,0,0,0.3); transform: scale({{remoteScale}}); transform-origin: top left; transition: {{remoteTrans}}">
+      <sc-for list="{{keys}}" as="k" hint-placeholder-count="27">
+        <div class="kw {{k.cls}}" style="position: absolute; left: {{k.x}}px; top: {{k.y}}px; width: 32px; height: 32px; opacity: {{k.op}}; transform: scale({{k.sc}}); pointer-events: {{k.pe}}; transition: {{k.trans}}">
+          <div class="jig" style="position: relative; width: 32px; height: 32px; animation-duration: {{k.jdur}}s; animation-delay: {{k.jd}}s; transform-origin: {{k.jo}}">
+            <button type="button" class="key" aria-label="{{k.aria}}" style="position: relative; width: 32px; height: 32px; border-radius: 5px; border: 0; padding: 0; margin: 0; display: block; background: {{k.bg}}; box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), inset 0 -2px 0 rgba(0,0,0,0.45), 0 1px 0 rgba(0,0,0,0.6); font: inherit; touch-action: none; transition: background .4s, box-shadow .25s" onPointerDown="{{k.down}}" onPointerMove="{{k.move}}" onPointerUp="{{k.up}}" onPointerCancel="{{k.up}}">
+              <span style="position: absolute; left: 4px; top: 3px; width: 24px; height: 22px; border-radius: 3px; background: {{k.top}}; pointer-events: none; transition: background .4s"></span>
+            </button>
+          </div>
+        </div>
+      </sc-for>
+      <button type="button" class="grab y {{grabYCls}}" aria-label="Resize height" style="left: {{grabYLeft}}px; top: {{grabYTop}}px; width: 28px; height: 4px; pointer-events: {{sizePE}}" onPointerDown="{{rsDownY}}" onPointerMove="{{rsMove}}" onPointerUp="{{rsUp}}" onPointerCancel="{{rsUp}}"></button>
+      <button type="button" class="grab x {{grabXCls}}" aria-label="Resize width" style="left: {{grabXLeft}}px; top: {{grabXTop}}px; width: 4px; height: 28px; pointer-events: {{sizePE}}" onPointerDown="{{rsDownX}}" onPointerMove="{{rsMove}}" onPointerUp="{{rsUp}}" onPointerCancel="{{rsUp}}"></button>
+    </div>
+  </div>
+
+  <div class="foot" style="min-height: 120px; display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; max-width: 860px">
+    <div class="tray {{trayCls}}" aria-hidden="{{trayHidden}}" style="height: {{trayH}}">
+      <sc-if value="{{traySheet}}" hint-placeholder-val="{{false}}">
+        <div class="pill" aria-hidden="true"></div>
+      </sc-if>
+      <div class="slots">
+        <sc-for list="{{traySlots}}" as="t" hint-placeholder-count="3">
+          <div class="slot" style="width: {{slotPx}}px; height: {{slotPx}}px">
+            <div class="outline" style="transform: scale({{z}}); opacity: {{t.ghostOp}}"></div>
+            <button type="button" class="spare" aria-label="{{t.aria}}" tabindex="{{trayTab}}" style="background: {{t.bg}}; opacity: {{t.op}}; transform: {{t.tf}}; transition: {{t.trans}}" onPointerDown="{{t.down}}" onPointerMove="{{t.move}}" onPointerUp="{{t.up}}" onPointerCancel="{{t.up}}">
+              <span style="position: absolute; left: 4px; top: 3px; width: 24px; height: 22px; border-radius: 3px; background: {{t.top}}; pointer-events: none"></span>
+            </button>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display: flex; align-items: center; gap: 4px; opacity: {{trayCtaOp}}; transition: opacity .4s; pointer-events: none">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"></path><path d="M6 11l6-6 6 6"></path></svg>
+        <div style="font-size: 12px; font-weight: 500; color: #6e6e73; white-space: nowrap; letter-spacing: 0.01em">Drag</div>
+      </div>
+    </div>
+    <sc-if value="{{introQ}}" hint-placeholder-val="{{true}}">
+      <div class="rise d1" style="display: flex; gap: 12px">
+        <button type="button" class="btn primary" onClick="{{onYes}}">Yes</button>
+        <button type="button" class="btn ghost" onClick="{{onNo}}">No</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{isPick}}" hint-placeholder-val="{{false}}">
+      <div class="rise d1" style="display: flex; gap: 12px">
+        <button type="button" class="btn ghost" onClick="{{pickSize}}">Size</button>
+        <button type="button" class="btn ghost" onClick="{{pickButtons}}">Buttons</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{showMake}}" hint-placeholder-val="{{false}}">
+      <button type="button" class="btn primary rise" onClick="{{onMake}}">Build or Buy</button>
+    </sc-if>
+    <sc-if value="{{canReset}}" hint-placeholder-val="{{false}}">
+      <button type="button" class="link rise" onClick="{{onReset}}">Start Over</button>
+    </sc-if>
+    <sc-if value="{{isBuy}}" hint-placeholder-val="{{false}}">
+      <div class="rise" style="width: 100%; max-width: 420px; background: #fff; border-radius: 20px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,0.06), 0 14px 32px -22px rgba(0,0,0,0.25)">
+        <sc-for list="{{tiers}}" as="t" hint-placeholder-count="3">
+          <button type="button" class="opt {{t.cls}}" onClick="{{t.pick}}" aria-pressed="{{t.on}}">
+            <span class="radio" aria-hidden="true">
+              <sc-if value="{{t.on}}" hint-placeholder-val="{{false}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></sc-if>
+            </span>
+            <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+              <span style="font-size: 15px; font-weight: 600; letter-spacing: -0.01em">{{t.name}}</span>
+              <span style="font-size: 13px; line-height: 1.35; color: #6e6e73">{{t.line}}</span>
+            </span>
+            <span style="font-size: 16px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; white-space: nowrap">${{t.price}}</span>
+          </button>
+        </sc-for>
+      </div>
+      <sc-if value="{{hasParts}}" hint-placeholder-val="{{false}}">
+        <div class="rise" style="width: 100%; max-width: 420px; background: #fff; border-radius: 20px; padding: 8px 18px; box-sizing: border-box; box-shadow: 0 0 0 1px rgba(0,0,0,0.06)">
+          <sc-for list="{{parts}}" as="p" hint-placeholder-count="6">
+            <div class="row">
+              <div style="color: #1d1d1f">{{p.name}}<span style="color: #8e8e93"> {{p.qty}}</span></div>
+              <div style="font-variant-numeric: tabular-nums; color: #6e6e73">{{p.cost}}</div>
+            </div>
+          </sc-for>
+          <div class="row" style="font-weight: 600">
+            <div>Total</div>
+            <div style="font-variant-numeric: tabular-nums">${{tierTotal}}</div>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{hasTier}}" hint-placeholder-val="{{false}}">
+        <button type="button" class="btn primary rise" onClick="{{onOrder}}">Order</button>
+      </sc-if>
+      <button type="button" class="link rise d2" onClick="{{onBack}}">Back</button>
+    </sc-if>
+    <sc-if value="{{isDone}}" hint-placeholder-val="{{false}}">
+      <div class="rise tab" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></div>
+      <button type="button" class="link rise d2" onClick="{{onAgain}}">Design another</button>
+    </sc-if>
+  </div>
+
+  <div class="panel {{panelCls}}" aria-hidden="{{panelHidden}}">
+    <sc-if value="{{isSheet}}" hint-placeholder-val="{{false}}">
+      <div class="pill" aria-hidden="true"></div>
+    </sc-if>
+    <p style="margin: 4px 0 0; font-size: 15px; color: #6e6e73">Try one</p>
+    <div style="display: flex; gap: 4px; justify-content: center">
+      <sc-for list="{{templates}}" as="t" hint-placeholder-count="3">
+        <button type="button" class="tpl {{t.cls}}" aria-label="{{t.aria}}" onClick="{{t.apply}}" tabindex="{{panelTab}}">
+          <div style="width: 68px; height: 176px; display: flex; align-items: center; justify-content: center">
+            <div style="position: relative; width: {{t.w}}px; height: {{t.h}}px; border-radius: 8px; background: #161618; box-shadow: 0 6px 14px -6px rgba(0,0,0,0.5)">
+              <sc-for list="{{t.keys}}" as="d" hint-placeholder-count="10">
+                <div style="position: absolute; left: {{d.x}}px; top: {{d.y}}px; width: 9px; height: 9px; border-radius: 2px; background: {{d.bg}}"></div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="font-size: 13px; font-weight: 500; color: #1d1d1f">{{t.name}}</div>
+        </button>
+      </sc-for>
+    </div>
+    <button type="button" class="link" onClick="{{onDismiss}}" tabindex="{{panelTab}}">Empty Remote</button>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":832}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.drag = null; this.rs = null; this.tr = null; this.n = 100;
+    this.state = {
+      screen: 'intro', ready: false, answer: null,
+      mode: null, keysLive: false, sizeLive: false,
+      W: 136, H: 336, keys: this.layoutKeys('minimal'),
+      dragId: null, resizing: null, morphing: false, template: null, templatesShown: false, templatesDone: false,
+      tray: { slot: 0, tx: 0, ty: 0, drag: false, phase: 'idle' }, added: false,
+      makeShown: false, tier: null, vw: 1280, vh: 832,
+      editStart: 0, lastAct: 0, acts: 0
+    };
+  }
+
+  // ---- layouts: 40px cells (32px cap + 8px air), 12px margin, keys snap to whole cells only; one empty cell between groups ----
+  layouts() {
+    var grid = function (xs, ys) { var out = []; ys.forEach(function (y) { xs.forEach(function (x) { out.push([x, y]); }); }); return out; };
+    return {
+      // streaming-box remote: back/power, D-pad with select, home row, transport, volume
+      minimal: { name: 'The Streamer', W: 136, H: 336, power: 1, white: 4, pts: [[12, 12], [92, 12], [52, 52], [12, 92], [52, 92], [92, 92], [52, 132], [12, 212], [52, 212], [92, 212], [12, 252], [52, 252], [92, 252], [12, 292], [92, 292]] },
+      // old-school giant: input/mute/power, numpad with guide/0/info, nav cluster, vol/ch rockers, full transport
+      classic: { name: 'The Boomer', W: 136, H: 576, power: 2, white: 19, pts: [[12, 12], [52, 12], [92, 12]].concat(grid([12, 52, 92], [52, 92, 132]), [[12, 172], [52, 172], [92, 172]], grid([12, 52, 92], [252, 292, 332]), grid([12, 52, 92], [412, 452]), grid([12, 52, 92], [492, 532])) },
+      // solid 4x7 slab, no gaps
+      wide: { name: 'The Brick', W: 176, H: 296, power: 3, white: -1, pts: grid([12, 52, 92, 132], [12, 52, 92, 132, 172, 212, 252]) },
+      // an empty shell to build on
+      blank: { name: 'Blank', W: 136, H: 256, power: -1, white: -1, pts: [] }
+    };
+  }
+  kindAt(L, i) { return i === L.power ? 'power' : (i === L.white ? 'white' : 'gray'); }
+  layoutKeys(name) {
+    var self = this, L = this.layouts()[name];
+    return L.pts.map(function (p, i) { return { id: 'k' + (self.n++), x: p[0], y: p[1], kind: self.kindAt(L, i) }; });
+  }
+
+  componentDidMount() {
+    this.t0 = setTimeout(() => this.setState({ ready: true }), 900);
+    this.iv = setInterval(() => this.check(), 300);
+    this.onResize = () => this.setState({ vw: window.innerWidth, vh: window.innerHeight });
+    this.onResize();
+    window.addEventListener('resize', this.onResize);
+  }
+  // how much to blow the remote up so it owns most of the screen's height
+  // leave ~70px clear on each side so the floating tray never covers the remote
+  // desktop with room keeps the tray in flow under the remote, so the remote takes a bit less height there
+  trayInline() { return this.state.vw >= 760 && this.state.vh >= 760; }
+  zoom() {
+    var s = this.state, f = this.trayInline() ? 0.54 : 0.62;
+    return this.clamp(Math.min((s.vh * f) / s.H, (s.vw - 140) / s.W), 0.75, 3);
+  }
+  componentWillUnmount() {
+    window.removeEventListener('resize', this.onResize);
+    clearTimeout(this.t0); clearTimeout(this.t2); clearTimeout(this.t3); clearTimeout(this.t4); clearTimeout(this.t6); clearTimeout(this.t7); clearInterval(this.iv);
+  }
+
+  clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  // stable pseudo-random in [0,1) per key index and channel, so each key keeps its own rhythm
+  rnd(i, c) { var x = Math.sin((i + 1) * 12.9898 + c * 78.233) * 43758.5453; return x - Math.floor(x); }
+  snapKey(v) { return 12 + Math.round((v - 12) / 40) * 40; }
+  // a key is shown only while its whole cell sits inside the shell
+  visible(k, W, H) { return k.x + 32 <= W - 4 && k.y + 32 <= H - 4; }
+  // sizes that hold whole cells with a 12px margin all round
+  snapDim(raw, coords, max) {
+    var set = {}; coords.forEach(function (c) { set[c] = true; });
+    var cands = Object.keys(set).map(Number);
+    if (!cands.length) cands = [12];
+    var last = Math.max.apply(null, cands), first = Math.min.apply(null, cands);
+    for (var i = 1; i <= 8; i++) cands.push(last + 40 * i);
+    // never smaller than the first column / row: at least one key always stays
+    cands = cands.map(function (c) { return c + 32 + 12; }).filter(function (c) { return c <= max && c >= first + 44; });
+    var best = cands[0];
+    cands.forEach(function (c) { if (Math.abs(c - raw) < Math.abs(best - raw)) best = c; });
+    return best;
+  }
+
+  check() {
+    var s = this.state;
+    // templates surface after 5s without a change; the clock starts at the first change
+    if (s.screen !== 'edit' || !s.mode || s.acts === 0) return;
+    if (Date.now() - s.lastAct > 5000) {
+      var st = {};
+      if (!s.makeShown) st.makeShown = true;
+      if (Object.keys(st).length) this.setState(st);
+    }
+  }
+  commit(next) {
+    next.acts = this.state.acts + 1; next.lastAct = Date.now(); next.templatesShown = false; next.templatesSnoozed = false; next.makeShown = false;
+    this.setState(next);
+  }
+  // ---- pricing: fake parts, priced off the keys actually on the remote ----
+  liveCount() { var s = this.state, self = this; return s.keys.filter(function (k) { return !k.dead && self.visible(k, s.W, s.H); }).length; }
+  partsFor(tier) {
+    var n = this.liveCount();
+    if (tier === 'diy') return [['Bare PCB', 1, 9], ['Controller module', 1, 6], ['Mechanical switches', n, 0.45], ['Keycaps', n, 0.30], ['IR emitter', 1, 1], ['Battery holder', 1, 2], ['Passives kit', 1, 3], ['Shell files (STL)', 1, 0]];
+    if (tier === 'kit') return [['Assembled board', 1, 29], ['Mechanical switches', n, 0.45], ['Keycaps', n, 0.30], ['Battery holder', 1, 2], ['Shell files (STL)', 1, 0]];
+    return [['Assembled board', 1, 29], ['Mechanical switches', n, 0.45], ['Keycaps', n, 0.30], ['Battery holder', 1, 2], ['Printed shell', 1, 14], ['Assembly and test', 1, 18]];
+  }
+  totalFor(tier) { return this.partsFor(tier).reduce(function (sum, p) { return sum + p[1] * p[2]; }, 0); }
+  money(v) { return v.toFixed(2); }
+
+  // ---- flow ----
+  answer(yes) { this.setState({ screen: 'edit', answer: yes ? 'yes' : 'no', mode: null }); }
+  pickMode(mode) {
+    var now = Date.now(), st = { mode: mode, editStart: now, lastAct: now, acts: 0 };
+    if (mode === 'size') { st.sizeLive = true; } else { st.keysLive = true; }
+    this.setState(st);
+  }
+  reset() {
+    clearTimeout(this.t2);
+    var now = Date.now();
+    this.setState({ W: 136, H: 336, keys: this.layoutKeys('minimal'), dragId: null, resizing: null, template: null, templatesShown: false, makeShown: false, tier: null,
+      editStart: now, lastAct: now, acts: 0 });
+  }
+  keysOn() { return this.state.screen === 'edit' && this.state.keysLive; }
+  sizeOn() { return this.state.screen === 'edit' && this.state.sizeLive; }
+
+  // ---- morph the live remote into a template layout ----
+  applyTemplate(name) {
+    var L = this.layouts()[name], s = this.state, self = this;
+    clearTimeout(this.t3); clearTimeout(this.t4);
+    // keep each special key with its role, so the red key flies to the new power slot
+    var live = s.keys.filter(function (k) { return !k.dead; });
+    var byKind = function (kind) { return live.filter(function (k) { return k.kind === kind; }); };
+    var pool = { power: byKind('power'), white: byKind('white'), gray: byKind('gray').sort(function (a, b) { return a.y - b.y || a.x - b.x; }) };
+    var next = [], used = {};
+    L.pts.forEach(function (p, i) {
+      var kind = self.kindAt(L, i), src = pool[kind].shift() || (kind !== 'gray' ? pool.gray.shift() : null);
+      if (src) { used[src.id] = true; next.push({ id: src.id, x: p[0], y: p[1], kind: kind }); }
+      else next.push({ id: 'k' + (self.n++), x: p[0], y: p[1], kind: kind, born: true });
+    });
+    live.forEach(function (k) { if (!used[k.id]) next.push({ id: k.id, x: k.x, y: k.y, kind: k.kind, dead: true }); });
+    this.setState({ W: L.W, H: L.H, keys: next, morphing: true, template: name, templatesShown: false, templatesDone: true, lastAct: Date.now(), trayReady: true, keysLive: true, sizeLive: true });
+    // next frame: let the newborn keys pop in
+    this.t3 = setTimeout(function () {
+      self.setState({ keys: self.state.keys.map(function (k) { return k.born ? { id: k.id, x: k.x, y: k.y, kind: k.kind } : k; }) });
+    }, 40);
+    // after the morph: stop staggering (dead keys stay as inert placeholders)
+    this.t4 = setTimeout(function () { self.setState({ morphing: false }); }, 900);
+  }
+
+  // ---- key drag / remove ----
+  keyDown(k, e) {
+    if (!this.keysOn()) return;
+    e.preventDefault();
+    var el = e.currentTarget, rect = el.closest('[data-remote]').getBoundingClientRect();
+    try { el.setPointerCapture(e.pointerId); } catch (err) {}
+    this.drag = { id: k.id, sx: e.clientX, sy: e.clientY, ox: k.x, oy: k.y, scale: rect.width / this.state.W, moved: false };
+  }
+  keyMove(k, e) {
+    var d = this.drag; if (!d || d.id !== k.id) return;
+    var dx = (e.clientX - d.sx) / d.scale, dy = (e.clientY - d.sy) / d.scale;
+    if (!d.moved) { if (Math.hypot(dx, dy) < 3) return; d.moved = true; this.setState({ dragId: k.id }); }
+    var s = this.state, x = d.ox + dx, y = d.oy + dy;
+    this.setState({ dragOut: this.isOut(x, y, s.W, s.H), keys: s.keys.map(function (o) { return o.id === k.id ? { id: o.id, x: x, y: y, kind: o.kind } : o; }) });
+  }
+  // the key's center has left the shell
+  isOut(x, y, W, H) { var cx = x + 16, cy = y + 16; return cx < 0 || cx > W || cy < 0 || cy > H; }
+  keyUp(k, e) {
+    var d = this.drag; if (!d || d.id !== k.id) return;
+    this.drag = null;
+    if (!d.moved) return;
+    var s = this.state, self = this;
+    var cur = s.keys.filter(function (o) { return o.id === k.id; })[0] || k;
+    if (this.isOut(cur.x, cur.y, s.W, s.H)) {
+      // dropped off the remote: it fades where it is and stays in the list as an inert
+      // placeholder, so the other keys keep their slots and nothing reflows
+      this.commit({ dragId: null, dragOut: false, sizeLive: true, template: null, keys: s.keys.map(function (o) {
+        return o.id === k.id ? { id: o.id, x: cur.x, y: cur.y, kind: o.kind, dead: true } : o;
+      }) });
+      return;
+    }
+    var nx = this.clamp(this.snapKey(cur.x), 4, s.W - 36), ny = this.clamp(this.snapKey(cur.y), 4, s.H - 36);
+    var taken = s.keys.some(function (o) { return o.id !== k.id && !o.dead && o.x === nx && o.y === ny && self.visible(o, s.W, s.H); });
+    if (taken) { nx = d.ox; ny = d.oy; }
+    this.commit({ dragId: null, dragOut: false, sizeLive: true, template: null, keys: s.keys.map(function (o) {
+      return o.id === k.id ? { id: o.id, x: nx, y: ny, kind: o.kind } : o;
+    }) });
+  }
+
+  // ---- the tray: a spare key beside the remote, dragged on to add one ----
+  trayKinds() { return this.state.added ? ['gray', 'white', 'power'] : ['gray']; }
+  // the tray lives in screen space; a drop is mapped into the remote's own grid
+  trayDown(i, e) {
+    if (this.state.screen !== 'edit' || this.tr) return;
+    e.preventDefault();
+    var el = e.currentTarget, r = el.getBoundingClientRect();
+    try { el.setPointerCapture(e.pointerId); } catch (err) {}
+    this.tr = { slot: i, sx: e.clientX, sy: e.clientY, cx: r.left + r.width / 2, cy: r.top + r.height / 2, moved: false };
+    this.setState({ tray: { slot: i, tx: 0, ty: 0, drag: true, phase: 'idle' } });
+  }
+  trayMove(e) {
+    var t = this.tr; if (!t) return;
+    t.moved = true;
+    this.setState({ tray: { slot: t.slot, tx: e.clientX - t.sx, ty: e.clientY - t.sy, drag: true, phase: 'idle' } });
+  }
+  trayUp(e) {
+    var t = this.tr; if (!t) return;
+    this.tr = null;
+    var s = this.state, self = this, i = t.slot, kind = this.trayKinds()[i] || 'gray';
+    var back = { tray: { slot: i, tx: 0, ty: 0, drag: false, phase: 'idle' } };
+    var rem = e.currentTarget.ownerDocument.querySelector('[data-remote]');
+    if (!t.moved || !rem) { this.setState(back); return; }
+    var rect = rem.getBoundingClientRect(), k = rect.width / s.W;
+    var x = (t.cx + s.tray.tx - rect.left) / k - 16, y = (t.cy + s.tray.ty - rect.top) / k - 16;
+    if (this.isOut(x, y, s.W, s.H)) { this.setState(back); return; }
+    var nx = this.clamp(this.snapKey(x), 4, s.W - 36), ny = this.clamp(this.snapKey(y), 4, s.H - 36);
+    var taken = s.keys.some(function (o) { return !o.dead && o.x === nx && o.y === ny && self.visible(o, s.W, s.H); });
+    if (taken) { this.setState(back); return; }
+    var id = 'k' + (this.n++);
+    // the new key lands where it was dropped; the tray key vanishes at once
+    this.commit({ template: null, keys: s.keys.concat([{ id: id, x: x, y: y, kind: kind }]), tray: { slot: i, tx: 0, ty: 0, drag: false, phase: 'hidden' } });
+    clearTimeout(this.t6); clearTimeout(this.t7);
+    // next frame: it glides into its cell while a fresh key pops into the dotted outline
+    this.t6 = setTimeout(function () {
+      self.setState({ added: true, keys: self.state.keys.map(function (o) { return o.id === id ? { id: o.id, x: nx, y: ny, kind: o.kind } : o; }), tray: { slot: i, tx: 0, ty: 0, drag: false, phase: 'pop' } });
+    }, 30);
+    this.t7 = setTimeout(function () { self.setState({ tray: { slot: i, tx: 0, ty: 0, drag: false, phase: 'idle' } }); }, 700);
+  }
+
+  // ---- shell resize: bottom grabber = height, right grabber = width ----
+  rsDown(axis, e) {
+    if (!this.sizeOn()) return;
+    e.preventDefault();
+    var el = e.currentTarget, rect = el.closest('[data-remote]').getBoundingClientRect();
+    try { el.setPointerCapture(e.pointerId); } catch (err) {}
+    this.rs = { axis: axis, sx: e.clientX, sy: e.clientY, oW: this.state.W, oH: this.state.H, scale: rect.width / this.state.W };
+    this.zHeld = this.zoom();
+    this.setState({ resizing: axis });
+  }
+  rsMove(e) {
+    var r = this.rs; if (!r) return;
+    var ks = this.state.keys.filter(function (k) { return !k.dead; });
+    var minW = ks.length ? Math.min.apply(null, ks.map(function (k) { return k.x; })) + 44 : 56;
+    var minH = ks.length ? Math.min.apply(null, ks.map(function (k) { return k.y; })) + 44 : 56;
+    if (r.axis === 'x') this.setState({ W: this.clamp(r.oW + (e.clientX - r.sx) / r.scale, minW, 320) });
+    else this.setState({ H: this.clamp(r.oH + (e.clientY - r.sy) / r.scale, minH, 800) });
+  }
+  rsUp(e) {
+    var r = this.rs; if (!r) return;
+    this.rs = null;
+    var s = this.state, next = { resizing: null, template: null };
+    var live = s.keys.filter(function (k) { return !k.dead; });
+    if (r.axis === 'x') next.W = this.snapDim(s.W, live.map(function (k) { return k.x; }), 320);
+    else next.H = this.snapDim(s.H, live.map(function (k) { return k.y; }), 800);
+    next.keysLive = true;
+    this.commit(next);
+  }
+
+  renderVals() {
+    var s = this.state, self = this;
+    var isEdit = s.screen === 'edit', keysOn = this.keysOn(), sizeOn = this.sizeOn();
+    var ease = 'cubic-bezier(.2,.8,.2,1)';
+    var caps = { gray: ['#232325', '#39393c'], white: ['#c6c6cb', '#ececf0'], power: ['#b8261d', '#ff453a'] };
+    var keys = s.keys.map(function (k, i) {
+      var kind = k.kind || 'gray', cap = caps[kind];
+      var drag = s.dragId === k.id, on = (drag || self.visible(k, s.W, s.H)) && !k.dead && !k.born;
+      var delay = s.morphing ? (i * 14) + 'ms' : '0s';
+      var out = drag && s.dragOut;
+      return {
+        id: k.id, x: k.x, y: k.y,
+        bg: cap[0], top: cap[1],
+        op: out ? 0.45 : (on ? 1 : 0), sc: out ? 0.9 : (drag ? 1.1 : (on ? 1 : 0.5)), pe: on ? 'auto' : 'none',
+        jdur: (0.22 + self.rnd(i, 1) * 0.12).toFixed(3), jd: (-self.rnd(i, 2)).toFixed(3),
+        jo: Math.round(30 + self.rnd(i, 3) * 40) + '% ' + Math.round(5 + self.rnd(i, 4) * 10) + '%',
+        cls: (drag ? 'dragging ' : '') + (k.dead ? 'dead ' : '') + (i % 2 ? 'alt ' : '') + (keysOn && on ? 'live' : ''),
+        editable: keysOn && on, aria: kind + ' key',
+        trans: (drag ? '' : 'left .55s ' + ease + ' ' + delay + ', top .55s ' + ease + ' ' + delay + ', ') + 'opacity .3s ' + ease + ' ' + delay + ', transform .35s ' + ease + ' ' + delay,
+        down: function (e) { self.keyDown(k, e); }, move: function (e) { self.keyMove(k, e); },
+        up: function (e) { self.keyUp(k, e); }
+      };
+    });
+    var L = this.layouts(), T = 0.3;
+    var templates = ['minimal', 'classic', 'wide'].map(function (name, i) {
+      var l = L[name], ks = l.pts.map(function (p, j) { return { id: 't' + i + '-' + j, x: p[0], y: p[1], kind: self.kindAt(l, j) }; });
+      return {
+        name: l.name, aria: l.name + ' layout', delay: 0.1 + i * 0.12,
+        w: Math.round(l.W * T), h: Math.round(l.H * T),
+        cls: s.template === name ? 'on' : '',
+        keys: ks.map(function (k) { return { id: k.id, x: Math.round(k.x * T), y: Math.round(k.y * T), bg: caps[k.kind][1] }; }),
+        apply: function () { self.applyTemplate(name); }
+      };
+    });
+    var z = s.resizing ? this.zHeld : this.zoom();
+    var tr = s.tray, spring = 'cubic-bezier(.34,1.56,.64,1)';
+    var traySlots = this.trayKinds().map(function (kind, i) {
+      var mine = tr.slot === i, cap = caps[kind];
+      var drag = mine && tr.drag, phase = mine ? tr.phase : 'idle';
+      var k = z * (phase === 'hidden' ? 0.3 : (drag ? 1.1 : 1));
+      return {
+        id: 'slot' + i, kind: kind, bg: cap[0], top: cap[1], aria: kind + ' key, drag onto the remote',
+        tf: 'translate(' + (mine ? tr.tx : 0) + 'px, ' + (mine ? tr.ty : 0) + 'px) scale(' + k.toFixed(3) + ')',
+        op: phase === 'hidden' ? 0 : 1,
+        ghostOp: (drag || phase !== 'idle') ? 1 : 0,
+        trans: drag ? 'none' : (phase === 'hidden' ? 'none' : 'transform .45s ' + spring + ', opacity .3s'),
+        down: function (e) { self.trayDown(i, e); }, move: function (e) { self.trayMove(e); }, up: function (e) { self.trayUp(e); }
+      };
+    });
+    var trayOn = isEdit && (s.acts >= 3 || s.trayReady), inline = this.trayInline();
+    var small = s.screen === 'buy' || s.screen === 'done';
+    var scale = small ? Math.min(z * 0.5, (s.vh * 0.2) / s.H) : z;
+    var tierDefs = [['diy', 'DIY', 'Bare parts. You solder, you print.'], ['kit', 'Kit', 'Assembled board. You print the shell.'], ['complete', 'Complete', 'Ready out of the box.']];
+    var tiers = tierDefs.map(function (d, i) {
+      return { id: d[0], name: d[1], line: d[2], price: self.money(self.totalFor(d[0])), on: s.tier === d[0], cls: s.tier === d[0] ? 'on' : '', pick: function () { self.setState({ tier: d[0] }); } };
+    });
+    var hasParts = s.tier === 'diy' || s.tier === 'kit';
+    var parts = hasParts ? this.partsFor(s.tier).map(function (p) {
+      return { name: p[0], qty: p[1] > 1 ? '× ' + p[1] : '', cost: p[2] === 0 ? 'Included' : '$' + self.money(p[1] * p[2]) };
+    }) : [];
+    var tierName = { diy: 'DIY', kit: 'Kit', complete: 'Complete' }[s.tier] || '';
+    var sizeTrans = s.resizing ? 'none' : (s.morphing ? 'width .7s ' + ease + ', height .7s ' + ease : 'width .3s ' + ease + ', height .3s ' + ease);
+    return {
+      introQ: s.screen === 'intro' && s.ready,
+      isEditYes: isEdit && s.answer === 'yes', isEditNo: isEdit && s.answer === 'no',
+      isPick: isEdit && !s.mode,
+      rootCls: (isEdit ? 'editing ' : '') + (s.resizing ? 'resizing ' : '') + (keysOn ? 'keys-live ' : '') + (sizeOn ? 'size-live ' : '') + (s.ready ? 'ready' : ''),
+      keys: keys, W: s.W, H: s.H,
+      stageW: Math.round(s.W * scale), stageH: Math.round(s.H * scale), remoteScale: scale,
+      stageTrans: small ? 'width .6s ' + ease + ', height .6s ' + ease : sizeTrans,
+      remoteTrans: (s.resizing ? '' : sizeTrans + ', ') + 'transform .6s ' + ease,
+      isBuy: s.screen === 'buy', isDone: s.screen === 'done',
+      showMake: isEdit && s.makeShown,
+      tiers: tiers, hasParts: hasParts, parts: parts, hasTier: !!s.tier,
+      tierTotal: s.tier ? this.money(this.totalFor(s.tier)) : '', orderName: tierName, orderTotal: s.tier ? this.money(this.totalFor(s.tier)) : '',
+      onMake: function () { self.setState({ screen: 'buy', makeShown: false, templatesShown: false }); },
+      onBack: function () { self.setState({ screen: 'edit', lastAct: Date.now() }); },
+      onOrder: function () { self.setState({ screen: 'done' }); },
+      onAgain: function () { self.reset(); self.setState({ screen: 'intro', answer: null, mode: null, keysLive: false, sizeLive: false, added: false, templatesDone: false }); },
+      grabYLeft: Math.round((s.W - 28) / 2), grabYTop: s.H - 9, grabYCls: s.resizing === 'y' ? 'on' : '',
+      grabXLeft: s.W - 9, grabXTop: Math.round((s.H - 28) / 2), grabXCls: s.resizing === 'x' ? 'on' : '',
+      sizePE: sizeOn ? 'auto' : 'none',
+      templates: templates,
+      isSheet: s.vw < 760,
+      panelCls: (s.vw < 760 ? 'sheet' : 'side') + (isEdit && s.templatesShown ? ' open' : ''),
+      panelHidden: !(isEdit && s.templatesShown), panelTab: (isEdit && s.templatesShown) ? 0 : -1,
+      onDismiss: function () { self.applyTemplate('blank'); },
+      traySlots: traySlots, z: z.toFixed(3), slotPx: Math.round(32 * z),
+      trayCls: (inline ? 'inline' : 'sheet') + (trayOn ? ' open' : ''), trayHidden: !trayOn, trayTab: trayOn ? 0 : -1,
+      traySheet: !inline, trayH: inline ? (trayOn ? (Math.round(32 * z) + 30) + 'px' : '0px') : 'auto',
+      padB: (!inline && trayOn) ? Math.round(32 * z) + 110 : 40,
+      trayCtaOp: (tr.drag || s.added) ? 0 : 1,
+      canReset: isEdit && s.acts > 0 && !s.templatesShown,
+      onYes: function () { self.answer(true); }, onNo: function () { self.answer(false); },
+      pickSize: function () { self.pickMode('size'); }, pickButtons: function () { self.pickMode('buttons'); },
+      onReset: function () { self.setState({ templatesShown: true }); },
+      rsDownX: function (e) { self.rsDown('x', e); }, rsDownY: function (e) { self.rsDown('y', e); },
+      rsMove: function (e) { self.rsMove(e); }, rsUp: function (e) { self.rsUp(e); }
+    };
+  }
+}
+</script>
+</body>
+</html>
