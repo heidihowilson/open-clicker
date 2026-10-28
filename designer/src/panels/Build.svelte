@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  export type ExportKind = "layout" | "keymap" | "header" | "kicad";
+  export type ExportKind = "layout" | "keymap" | "header";
 </script>
 
 <script lang="ts">
@@ -103,13 +103,12 @@
     <h2>Export</h2>
     {#if blocked}<p class="small alert">{blocked}</p>{/if}
     <div class="exports">
-      <button class="oc-btn" disabled={!!blocked} onclick={() => onExport("kicad")}>KiCad project</button>
       <button class="oc-btn" disabled={!!blocked} onclick={() => onExport("keymap")}>Keymap</button>
       <button class="oc-btn" disabled={!!blocked || chip.firmware !== "esp-idf"} title={chip.firmware !== "esp-idf" ? "No firmware for this controller yet." : ""} onclick={() => onExport("header")}>keymap.h</button>
       <button class="oc-btn" onclick={() => onExport("layout")}>Layout file</button>
       <label class="oc-btn">Open a layout<input type="file" accept="application/json,.json" onchange={onImport} hidden /></label>
     </div>
-    <p class="small">The KiCad project is the same board before routing, for anyone who wants to route it by hand. The shell STL files come next.</p>
+    <p class="small">The routed board above includes the full KiCad project. The shell STL files come next.</p>
     {#if notice}<p class="small alert">{notice}</p>{/if}
   </section>
 

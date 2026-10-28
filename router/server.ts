@@ -2,20 +2,14 @@
  * POST /jobs (design JSON) -> 202 { id }; GET /jobs/:id -> state; GET /jobs/:id/result -> zip.
  * One job routes at a time; a short queue absorbs bursts. Results live for an hour. */
 import { createHash } from "node:crypto";
-import { appendFile, mkdtemp, readdir, readFile, rm, writeFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdir } from "node:fs/promises";
 import { z } from "zod";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { check, errorsIn } from "../designer/src/lib/checks";
 import { safeParseDesign, type Design } from "../designer/src/lib/design";
-import { kicadProject } from "../designer/src/lib/kicad";
-import { zip } from "../designer/src/lib/zip";
+import { buildBoard, type Report } from "./pipeline";
 
 const PORT = Number(process.env.PORT ?? 8790);
-const ROUTER = process.env.FREEROUTING ?? "/opt/freerouting/bin/freerouting";
-const ROUTE_SCRIPT = join(import.meta.dir, "route.py");
-const PYTHON = process.env.PYTHON ?? "python3";
-const TIMEOUT_S = 180;
 const MAX_QUEUE = 6;
 const MAX_BODY = 64 * 1024;
 const KEEP_MS = 60 * 60 * 1000;
@@ -24,7 +18,6 @@ const NotifySchema = z.object({ email: z.string().trim().toLowerCase().email().m
 const lastNotify = new Map<string, number>();
 const ORIGINS = (process.env.ALLOWED_ORIGINS ?? "https://openremote.sethgholson.com,http://localhost:5173,http://127.0.0.1:4317").split(",");
 
-interface Report { seconds: number; segments: number; unrouted: number; problems: Record<string, number> }
 interface Job { id: string; key: string; design: Design; state: "queued" | "routing" | "done" | "failed"; error?: string; report?: Report; result?: Uint8Array; name?: string; at: number }
 
 const jobs = new Map<string, Job>();
@@ -41,59 +34,9 @@ function view(job: Job) {
   return { id: job.id, state: job.state, position: job.state === "queued" ? queue.indexOf(job) + 1 : 0, error: job.error, report: job.report };
 }
 
-async function run(cmd: string[], cwd: string): Promise<string> {
-  const p = Bun.spawn(cmd, { cwd, stdout: "pipe", stderr: "pipe", env: { ...process.env, HOME: cwd } });
-  const timer = setTimeout(() => p.kill(), (TIMEOUT_S + 60) * 1000);
-  const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
-  clearTimeout(timer);
-  if (code !== 0) throw new Error(err.trim().split("\n").pop() || `exit ${code}`);
-  return out;
-}
-
 async function route(job: Job) {
-  const dir = await mkdtemp(join(tmpdir(), "clicker-"));
-  try {
-    const project = kicadProject(job.design);
-    for (const [name, text] of Object.entries(project.files)) {
-      await mkdir(dirname(join(dir, name)), { recursive: true });
-      await writeFile(join(dir, name), text);
-    }
-    const pcb = join(dir, project.name, `${project.name}.kicad_pcb`);
-    const gerberDir = join(dir, "gerbers");
-    await mkdir(gerberDir);
-    const out = await run([PYTHON, ROUTE_SCRIPT, pcb, gerberDir, ROUTER, String(TIMEOUT_S)], dir);
-    job.report = JSON.parse(out.trim().split("\n").pop()!) as Report;
-
-    const gerbers: Record<string, string> = {};
-    for (const f of await readdir(gerberDir)) gerbers[f] = await readFile(join(gerberDir, f), "utf8");
-    const files: Record<string, string | Uint8Array> = {};
-    for (const name of Object.keys(project.files)) {
-      const text = await readFile(join(dir, name), "utf8");
-      files[name.replace(`${project.name}/`, `${project.name}/kicad/`)] = name.endsWith("README.txt")
-        ? `${job.design.name}, revision ${job.design.revision}: the routed board. Open the .kicad_pro in KiCad 7 or later to look at it or change it.\n`
-        : text;
-    }
-    files[`${project.name}/${project.name}-gerbers.zip`] = zip(gerbers);
-    files[`${project.name}/ORDER.txt`] = order(job.design, project.name, job.report);
-    job.result = zip(files);
-    job.name = `${project.name}-routed.zip`;
-    job.state = "done";
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-}
-
-function order(d: Design, slug: string, r: Report): string {
-  return `${d.name}, revision ${d.revision}, routed by the Open Clicker router in ${r.seconds} s.
-${r.unrouted ? `WARNING: ${r.unrouted} connections are not routed. Finish them in KiCad before you order.\n` : "Every connection is routed and the design-rule check passed.\n"}
-To order bare boards:
-1. Go to jlcpcb.com (or any fab that takes Gerbers) and choose "Order now".
-2. Upload ${slug}-gerbers.zip as it is. Do not unzip it.
-3. Keep the defaults: 2 layers, 1.6 mm FR-4. Any solder-mask colour works.
-4. Order 5 boards, the minimum.
-
-The kicad/ folder holds the same board, routed, for anyone who wants to change it.
-`;
+  const { zip: result, report, name } = await buildBoard(job.design);
+  job.report = report; job.result = result; job.name = name; job.state = "done";
 }
 
 async function pump() {

@@ -16,9 +16,7 @@
   import { newDesignId, parseDesign, safeParseDesign, type Design, type TemplateId } from "./lib/design";
   import { keymap, keymapHeader, layoutFile } from "./lib/exports";
   import { planPins } from "./lib/matrix";
-  import { kicadProject } from "./lib/kicad";
   import { keyCapacity } from "./lib/netlist";
-  import { zip } from "./lib/zip";
   import { DEFAULT_PRICING, tiers, type Tier } from "./lib/pricing";
 
   const SEEDS: Record<Exclude<TemplateId, "custom">, Design> = {
@@ -107,7 +105,6 @@
     try {
       const d = $state.snapshot(design) as Design;
       if (kind === "layout") download(`${slug}.layout.json`, layoutFile(d), "application/json");
-      if (kind === "kicad") { const p = kicadProject(d); download(`${p.name}-kicad.zip`, zip(p.files), "application/zip"); }
       if (kind === "keymap") download(`${slug}.keymap.json`, JSON.stringify(keymap(d), null, 2), "application/json");
       if (kind === "header") download("keymap.h", keymapHeader(d), "text/x-c");
       design.revision += 1;

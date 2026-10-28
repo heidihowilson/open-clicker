@@ -142,15 +142,15 @@ test("key capacity matches the planner", () => {
   expect(planPins({ ...tile, keys: Array.from({ length: cap + 1 }, (_, i) => ({ id: `k${i}`, x: i * 18, y: 0, w: 1 as const, action: "none" as const, label: "" })) }).ok).toBe(false);
 });
 
-test("the KiCad project is deterministic and places every part on the board", () => {
+test("the KiCad project is deterministic and the board spec uses published footprints", () => {
   const a = kicadProject(tile), b = kicadProject(structuredClone(tile));
   expect(JSON.stringify(a)).toBe(JSON.stringify(b));
-  const pcb = Object.entries(a.files).find(([n]) => n.endsWith(".kicad_pcb"))![1];
   const sch = Object.entries(a.files).find(([n]) => n.endsWith(".kicad_sch"))![1];
   const parts = netlist(tile).parts;
-  expect(pcb.match(/\(footprint /g)!.length).toBe(parts.length);
+  expect(a.spec.parts.length).toBe(parts.length);
   expect(sch.match(/\(symbol \(lib_id /g)!.length).toBe(parts.length);
-  expect(pcb).toContain('(layer "Edge.Cuts")');
+  for (const p of a.spec.parts) expect(p.footprint).toMatch(/^[A-Za-z0-9_.]+:[A-Za-z0-9_.-]+$/);
+  expect(a.spec.parts.find((p) => p.ref === "U1")!.expect).toBeDefined();
   const bytes = zip(a.files);
   expect(new DataView(bytes.buffer).getUint32(0, true)).toBe(0x04034b50);
 });

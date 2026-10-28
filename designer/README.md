@@ -38,13 +38,8 @@ The tool follows the **Open Clicker** design system in [`docs/brand/`](../docs/b
 
 PCB (KiCad), switch plate, shell and bill-of-materials export. The XIAO footprint, diode placement and routing need checking against the parts in hand before any of it is offered as a manufacturing file.
 
-## KiCad export
+## KiCad and Gerbers
 
-`src/lib/kicad.ts` writes a KiCad 7 project (`.kicad_pro`, `.kicad_sch`, `.kicad_pcb`), zipped in the browser by `src/lib/zip.ts`. To check it against real KiCad:
-
-```sh
-bun scripts/kicad-check.ts /tmp/kicad-out      # every template, plus Tile with IR
-python3 scripts/kicad-verify.py /tmp/kicad-out  # schematic nets == board pad nets; DRC without shorts or overlaps
-```
-
-`kicad-verify.py` needs KiCad 7 or later (`kicad-cli` and the `pcbnew` Python module). Footprints are drawn inline, so DRC lists "footprint not in a library" notes; those are expected, as are the unrouted connections.
+`src/lib/kicad.ts` writes the schematic and a board spec; the router ([`router/`](../router/README.md))
+has KiCad 9 build, route and check the board from published footprints and returns the Gerbers.
+`router/test.sh` runs every layout through it.

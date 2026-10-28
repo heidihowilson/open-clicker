@@ -21,18 +21,19 @@ export interface Netlist {
   nets: string[];
 }
 
-/* Footprint names. Every pad is drawn by kicad.ts, so the board needs no library. */
+/* Footprint library ids. All come from published libraries; router/footprints/README.md says
+ * which. The board is built from them by KiCad itself on the router (router/board.py). */
 export const FOOTPRINTS = {
-  xiao: "OpenClicker:XIAO_Back",
-  switch: "OpenClicker:Choc_V1_Hotswap",
-  diode: "OpenClicker:D_SOD-123",
-  battery: "OpenClicker:JST_PH_B2B-PH-K_Vertical",
-  batteryLink: "OpenClicker:Wire_Pads_2",
-  r0805: "OpenClicker:R_0805",
-  c0805: "OpenClicker:C_0805",
-  irLed: "OpenClicker:LED_D3.0mm",
-  sot23: "OpenClicker:SOT-23",
-  irReceiver: "OpenClicker:IR_Receiver_3Pin",
+  xiao: "OpenClicker:XIAO-ESP32-C6-DIP",
+  switch: "OpenClicker:SW_Hotswap_Kailh_Choc_V1",
+  diode: "Diode_SMD:D_SOD-123",
+  battery: "Connector_JST:JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical",
+  batteryLink: "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+  r0805: "Resistor_SMD:R_0805_2012Metric",
+  c0805: "Capacitor_SMD:C_0805_2012Metric",
+  irLed: "LED_THT:LED_D3.0mm",
+  sot23: "Package_TO_SOT_SMD:SOT-23",
+  irReceiver: "OptoDevice:Vishay_MOLD-3Pin",
 } as const;
 
 export interface Designators {

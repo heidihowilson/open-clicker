@@ -1,14 +1,14 @@
 import type { Design } from "./design";
 import { boardBounds, partSpots, type Bounds } from "./geometry";
 import { netlist, type Netlist, type Part } from "./netlist";
-import { CHOC, DIODE, PCB, XIAO_BOARD } from "./parts-data";
+import { DIODE, PCB, XIAO_BOARD } from "./parts-data";
 
-/* KiCad 7 project from a design: a schematic with every part and net, and a board with every
- * footprint placed and every pad on its net. Traces are left to the builder (or an
- * autorouter). Everything is derived from the design file, so the same file always gives the
- * same project, uuids included. KiCad 8 and 9 open these files and upgrade them. */
+/* KiCad project from a design: the schematic with every part and net, and a board spec that
+ * KiCad itself turns into the board (router/board.py), using published footprints only.
+ * Everything is derived from the design file, so the same file always gives the same project,
+ * uuids included. */
 
-export interface KicadProject { name: string; files: Record<string, string> }
+export interface KicadProject { name: string; spec: BoardSpec; files: Record<string, string> }
 
 /* ---------- shared ---------- */
 
@@ -28,7 +28,6 @@ const font = (size = 1.27) => `(effects (font (size ${n(size)} ${n(size)})))`;
 
 /* ---------- pins and pads, one table per footprint ---------- */
 
-interface Pad { num: string; kind: "smd" | "thru_hole" | "np_thru_hole"; shape: "rect" | "circle" | "oval" | "roundrect"; x: number; y: number; w: number; h: number; drill?: number; back?: boolean }
 
 /** XIAO pad numbers: 1–7 are D0–D6, 8–11 D7–D10, then 3V3, GND and 5V (Seeed OPL footprint). */
 const XIAO_PAD: Record<string, string> = { D0: "1", D1: "2", D2: "3", D3: "4", D4: "5", D5: "6", D6: "7", D7: "8", D8: "9", D9: "10", D10: "11", "3V3": "12", GND: "13", "5V": "14" };
@@ -63,61 +62,6 @@ function padNets(p: Part): Map<string, string> {
   return map;
 }
 
-/* Pads in board orientation, relative to the footprint origin, so no footprint is rotated or
- * mirrored. Back-side SMD pads sit on B.Cu inside a front footprint, as Ergogen does. */
-function padsFor(kind: Kind): Pad[] {
-  switch (kind) {
-    case "switch": return [
-      /* Kailh Choc hot-swap socket on the back (Ergogen choc.js). */
-      { num: "", kind: "np_thru_hole", shape: "circle", x: 0, y: 0, w: CHOC.centerPost.diameter, h: CHOC.centerPost.diameter, drill: CHOC.centerPost.diameter },
-      { num: "", kind: "np_thru_hole", shape: "circle", x: -CHOC.sidePosts.x, y: 0, w: CHOC.sidePosts.diameter, h: CHOC.sidePosts.diameter, drill: CHOC.sidePosts.diameter },
-      { num: "", kind: "np_thru_hole", shape: "circle", x: CHOC.sidePosts.x, y: 0, w: CHOC.sidePosts.diameter, h: CHOC.sidePosts.diameter, drill: CHOC.sidePosts.diameter },
-      { num: "", kind: "np_thru_hole", shape: "circle", x: 0, y: -5.95, w: 3, h: 3, drill: 3 },
-      { num: "", kind: "np_thru_hole", shape: "circle", x: 5, y: -3.75, w: 3, h: 3, drill: 3 },
-      { num: "1", kind: "smd", shape: "rect", x: -3.275, y: -5.95, w: 2.6, h: 2.6, back: true },
-      { num: "2", kind: "smd", shape: "rect", x: 8.275, y: -3.75, w: 2.6, h: 2.6, back: true },
-    ];
-    case "diode": return [
-      { num: "1", kind: "smd", shape: "roundrect", x: -1.65, y: 0, w: 0.9, h: 1.2, back: true },
-      { num: "2", kind: "smd", shape: "roundrect", x: 1.65, y: 0, w: 0.9, h: 1.2, back: true },
-    ];
-    case "r": case "c": return [
-      { num: "1", kind: "smd", shape: "roundrect", x: -0.9125, y: 0, w: 1.025, h: 1.4, back: true },
-      { num: "2", kind: "smd", shape: "roundrect", x: 0.9125, y: 0, w: 1.025, h: 1.4, back: true },
-    ];
-    case "npn": return [
-      { num: "1", kind: "smd", shape: "roundrect", x: -0.9375, y: -0.95, w: 1.325, h: 0.6, back: true },
-      { num: "2", kind: "smd", shape: "roundrect", x: -0.9375, y: 0.95, w: 1.325, h: 0.6, back: true },
-      { num: "3", kind: "smd", shape: "roundrect", x: 0.9375, y: 0, w: 1.325, h: 0.6, back: true },
-    ];
-    case "conn": return [
-      { num: "1", kind: "thru_hole", shape: "rect", x: -1, y: 0, w: 1.2, h: 1.75, drill: 0.75 },
-      { num: "2", kind: "thru_hole", shape: "oval", x: 1, y: 0, w: 1.2, h: 1.75, drill: 0.75 },
-    ];
-    case "led": return [
-      { num: "1", kind: "thru_hole", shape: "rect", x: -1.27, y: 0, w: 1.8, h: 1.8, drill: 0.9 },
-      { num: "2", kind: "thru_hole", shape: "circle", x: 1.27, y: 0, w: 1.8, h: 1.8, drill: 0.9 },
-    ];
-    case "tsop": return [
-      { num: "1", kind: "thru_hole", shape: "rect", x: -2.54, y: 0, w: 1.5, h: 1.5, drill: 0.8 },
-      { num: "2", kind: "thru_hole", shape: "circle", x: 0, y: 0, w: 1.5, h: 1.5, drill: 0.8 },
-      { num: "3", kind: "thru_hole", shape: "circle", x: 2.54, y: 0, w: 1.5, h: 1.5, drill: 0.8 },
-    ];
-    case "xiao": {
-      /* Module local frame (OPL): USB-C at +x, pad 1 at (7.62, -7.62). It hangs pads-up under the
-       * board with USB-C at the bottom edge, which maps local (fx, fy) to board (fy, fx). */
-      const X = XIAO_BOARD;
-      const pads: Pad[] = [];
-      for (let i = 0; i < 14; i++) {
-        const fx = i < 7 ? X.padRow - i * X.padPitch : -X.padRow + (i - 7) * X.padPitch;
-        const fy = i < 7 ? -X.padRow : X.padRow;
-        pads.push({ num: String(i + 1), kind: "thru_hole", shape: i === 0 ? "rect" : "circle", x: fy, y: fx, w: X.padDiameter + 0.2, h: X.padDiameter + 0.2, drill: X.padDrill + 0.1 });
-      }
-      return pads;
-    }
-  }
-}
-
 /* ---------- placement on the board ---------- */
 
 function placements(design: Design, list: Netlist, bounds: Bounds): Map<string, { x: number; y: number }> {
@@ -132,87 +76,56 @@ function placements(design: Design, list: Netlist, bounds: Bounds): Map<string, 
   return at;
 }
 
-/* ---------- board ---------- */
+/* ---------- board spec: what KiCad builds the board from (router/board.py) ---------- */
 
-const LAYERS = `(layers
-    (0 "F.Cu" signal) (31 "B.Cu" signal) (32 "B.Adhes" user "B.Adhesive") (33 "F.Adhes" user "F.Adhesive")
-    (34 "B.Paste" user) (35 "F.Paste" user) (36 "B.SilkS" user "B.Silkscreen") (37 "F.SilkS" user "F.Silkscreen")
-    (38 "B.Mask" user) (39 "F.Mask" user) (40 "Dwgs.User" user "User.Drawings") (41 "Cmts.User" user "User.Comments")
-    (42 "Eco1.User" user "User.Eco1") (43 "Eco2.User" user "User.Eco2") (44 "Edge.Cuts" user) (45 "Margin" user)
-    (46 "B.CrtYd" user "B.Courtyard") (47 "F.CrtYd" user "F.Courtyard") (48 "B.Fab" user) (49 "F.Fab" user)
-  )`;
-
-function outline(b: Bounds): string {
-  const r = PCB.cornerRadius, s = Math.SQRT1_2;
-  const out: string[] = [];
-  const line = (x1: number, y1: number, x2: number, y2: number) =>
-    out.push(`  (gr_line (start ${n(x1)} ${n(y1)}) (end ${n(x2)} ${n(y2)}) (stroke (width 0.1) (type default)) (layer "Edge.Cuts") (tstamp ${uuid(`edge${out.length}`)}))`);
-  const arc = (cx: number, cy: number, a0: [number, number], mid: [number, number], a1: [number, number]) =>
-    out.push(`  (gr_arc (start ${n(cx + a0[0] * r)} ${n(cy + a0[1] * r)}) (mid ${n(cx + mid[0] * r)} ${n(cy + mid[1] * r)}) (end ${n(cx + a1[0] * r)} ${n(cy + a1[1] * r)}) (stroke (width 0.1) (type default)) (layer "Edge.Cuts") (tstamp ${uuid(`edge${out.length}`)}))`);
-  line(b.minX + r, b.minY, b.maxX - r, b.minY);
-  arc(b.maxX - r, b.minY + r, [0, -1], [s, -s], [1, 0]);
-  line(b.maxX, b.minY + r, b.maxX, b.maxY - r);
-  arc(b.maxX - r, b.maxY - r, [1, 0], [s, s], [0, 1]);
-  line(b.maxX - r, b.maxY, b.minX + r, b.maxY);
-  arc(b.minX + r, b.maxY - r, [0, 1], [-s, s], [-1, 0]);
-  line(b.minX, b.maxY - r, b.minX, b.minY + r);
-  arc(b.minX + r, b.minY + r, [-1, 0], [-s, -s], [0, -1]);
-  return out.join("\n");
+export interface SpecPart {
+  ref: string; value: string; footprint: string;
+  /** Where the part goes, in mm on the board (y down), and which side. */
+  x: number; y: number; back: boolean;
+  /** "origin" puts the footprint origin there (switches sit on their key centre);
+   * "pads" centres the footprint's pads there. */
+  align: "origin" | "pads";
+  /** Pad number -> net. */
+  pads: Record<string, string>;
+  /** The schematic symbol's uuid, so KiCad can check the board against the schematic. */
+  symbol: string;
+  /** Pads that must land at these board positions; KiCad's own flip and rotation are searched
+   * until they do, rather than assumed. Used for the XIAO, which hangs under the board. */
+  expect?: Record<string, [number, number]>;
+}
+export interface BoardSpec {
+  name: string; revision: number; id: string;
+  outline: { minX: number; minY: number; maxX: number; maxY: number; radius: number };
+  parts: SpecPart[];
 }
 
-function padLine(pad: Pad, net: { id: number; name: string } | null, seed: string): string {
-  const copper = pad.kind === "smd"
-    ? (pad.back ? `"B.Cu" "B.Paste" "B.Mask"` : `"F.Cu" "F.Paste" "F.Mask"`)
-    : `"*.Cu" "*.Mask"`;
-  const drill = pad.drill !== undefined ? ` (drill ${n(pad.drill)})` : "";
-  const round = pad.shape === "roundrect" ? " (roundrect_rratio 0.25)" : "";
-  const netPart = net ? ` (net ${net.id} ${q(net.name)})` : "";
-  return `    (pad ${q(pad.num)} ${pad.kind} ${pad.shape} (at ${n(pad.x)} ${n(pad.y)}) (size ${n(pad.w)} ${n(pad.h)})${drill} (layers ${copper})${round}${netPart} (tstamp ${uuid(seed)}))`;
-}
+const BACK: Kind[] = ["diode", "r", "c", "npn", "conn", "xiao"];
 
-function courtyard(pads: Pad[], kind: Kind): { x0: number; y0: number; x1: number; y1: number; back: boolean } {
-  if (kind === "switch") return { x0: -7.5, y0: -7.5, x1: 7.5, y1: 7.5, back: false };
-  if (kind === "xiao") return { x0: -XIAO_BOARD.halfWidth, y0: XIAO_BOARD.minX, x1: XIAO_BOARD.halfWidth, y1: XIAO_BOARD.maxX + XIAO_BOARD.usb.overhang, back: true };
-  const xs = pads.flatMap((p) => [p.x - p.w / 2, p.x + p.w / 2]), ys = pads.flatMap((p) => [p.y - p.h / 2, p.y + p.h / 2]);
-  return { x0: Math.min(...xs) - 0.25, y0: Math.min(...ys) - 0.25, x1: Math.max(...xs) + 0.25, y1: Math.max(...ys) + 0.25, back: pads.every((p) => p.back) };
-}
-
-export function kicadPcb(design: Design, list: Netlist = netlist(design)): string {
+export function boardSpec(design: Design, list: Netlist = netlist(design)): BoardSpec {
   const bounds = boardBounds(design);
-  const nets = list.nets.map((name, i) => ({ id: i + 1, name }));
-  const netId = new Map(nets.map((x) => [x.name, x]));
   const at = placements(design, list, bounds);
-  const footprints = list.parts.map((part) => {
+  const parts = list.parts.map((part): SpecPart => {
     const kind = kindOf(part);
-    const pads = padsFor(kind);
-    const nets = padNets(part);
     const p = at.get(part.ref) ?? { x: 0, y: 0 };
-    const cy = courtyard(pads, kind);
-    const silk = cy.back ? "B.SilkS" : "F.SilkS";
-    const mirror = cy.back ? " (justify mirror)" : "";
-    const sym = uuid(`${design.id}/sym/${part.ref}`);
-    return `  (footprint ${q(part.footprint)} (layer "F.Cu") (tstamp ${uuid(`${design.id}/fp/${part.ref}`)}) (at ${n(p.x)} ${n(p.y)})
-    (path "/${sym}")
-    (attr ${kind === "switch" || kind === "xiao" || kind === "conn" || kind === "led" || kind === "tsop" ? "through_hole" : "smd"})
-    (fp_text reference ${q(part.ref)} (at 0 ${n(cy.y0 - 0.8)}) (layer ${q(silk)}) (tstamp ${uuid(`${design.id}/ref/${part.ref}`)}) (effects (font (size 0.8 0.8) (thickness 0.12))${mirror}))
-    (fp_text value ${q(part.value)} (at 0 ${n(cy.y1 + 0.8)}) (layer "F.Fab") (tstamp ${uuid(`${design.id}/val/${part.ref}`)}) (effects (font (size 0.8 0.8) (thickness 0.12))))
-    (fp_rect (start ${n(cy.x0)} ${n(cy.y0)}) (end ${n(cy.x1)} ${n(cy.y1)}) (stroke (width 0.05) (type default)) (fill none) (layer ${cy.back ? '"B.CrtYd"' : '"F.CrtYd"'}) (tstamp ${uuid(`${design.id}/cy/${part.ref}`)}))
-${pads.map((pad, i) => padLine(pad, pad.num ? (netId.get(nets.get(pad.num) ?? "") ?? null) : null, `${design.id}/pad/${part.ref}/${i}`)).join("\n")}
-  )`;
-  }).join("\n");
-
-  return `(kicad_pcb (version 20221018) (generator open_clicker)
-  (general (thickness 1.6))
-  (paper "A4")
-  (title_block (title ${q(design.name)}) (rev ${q(String(design.revision))}) (company "Open Clicker") (comment 1 ${q(`Design ${design.id}`)}) (comment 2 "Generated by the Open Clicker designer. Placement only; route the traces."))
-  ${LAYERS}
-  (setup (pad_to_mask_clearance 0))
-  (net 0 "")
-${nets.map((x) => `  (net ${x.id} ${q(x.name)})`).join("\n")}
-${footprints}
-${outline(bounds)}
-)
-`;
+    const spec: SpecPart = {
+      ref: part.ref, value: part.value, footprint: part.footprint, x: p.x, y: p.y,
+      back: BACK.includes(kind), align: kind === "switch" ? "origin" : "pads",
+      pads: Object.fromEntries(padNets(part)), symbol: uuid(`${design.id}/sym/${part.ref}`),
+    };
+    /* KiCad gives each unused symbol pin its own net, "unconnected-(U1-D9-Pad10)"; the board
+     * carries the same names so the schematic parity check compares like with like. */
+    for (const pin of SYMBOLS[kind].pins) {
+      if (spec.pads[pin.num] === undefined) spec.pads[pin.num] = `unconnected-(${part.ref}-${pin.name === "~" ? "" : `${pin.name}-`}Pad${pin.num})`;
+    }
+    if (kind === "xiao") {
+      /* The module hangs pads-up under the board with USB-C at the bottom edge: its local
+       * (fx, fy) lands at board (x + fy, y + fx). Pad 1 is at local (7.62, -7.62). */
+      const X = XIAO_BOARD, to = (fx: number, fy: number): [number, number] => [p.x + fy, p.y + fx];
+      spec.expect = { "1": to(X.padRow, -X.padRow), "7": to(-X.padRow, -X.padRow), "14": to(X.padRow, X.padRow) };
+    }
+    return spec;
+  });
+  return { name: design.name, revision: design.revision, id: design.id, outline: { ...bounds, radius: PCB.cornerRadius }, parts };
 }
 
 /* ---------- schematic ---------- */
@@ -316,11 +229,12 @@ export function kicadProject(design: Design): KicadProject {
   const pro = JSON.stringify({ meta: { filename: `${slug}.kicad_pro`, version: 1 }, board: { design_settings: { defaults: {} } }, sheets: [[uuid(`${design.id}/root`), ""]] }, null, 2);
   return {
     name: slug,
+    spec: boardSpec(design, list),
     files: {
       [`${slug}/${slug}.kicad_pro`]: pro,
       [`${slug}/${slug}.kicad_sch`]: kicadSchematic(design, list, slug),
-      [`${slug}/${slug}.kicad_pcb`]: kicadPcb(design, list),
-      [`${slug}/README.txt`]: `${design.name}, revision ${design.revision}. Generated by the Open Clicker designer from design ${design.id}.\n\nThe schematic and the board are complete: every part is placed and every pad is on its net. Route the traces in KiCad (or with Freerouting), run DRC, then export Gerbers.\n\nSwitch sockets, diodes and the IR driver sit on the back. The XIAO hangs under the board with USB-C at the bottom edge; solder two short wires from J2 to its BAT pads.\n`,
+      /* The two footprints KiCad does not ship travel with the project. */
+      [`${slug}/fp-lib-table`]: `(fp_lib_table\n  (version 7)\n  (lib (name "OpenClicker")(type "KiCad")(uri "\${KIPRJMOD}/OpenClicker.pretty")(options "")(descr "Open Clicker: XIAO and Choc hot-swap footprints"))\n)\n`,
     },
   };
 }
