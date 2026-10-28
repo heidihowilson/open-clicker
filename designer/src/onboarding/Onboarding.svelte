@@ -12,7 +12,6 @@
   import { FUNCTION_NAMES, type Fn, type Label } from "./labels";
 
   type Screen = "intro" | "edit" | "buy" | "done";
-  type Mode = "size" | "buttons" | null;
   type TemplateName = "streamer" | "boomer" | "brick";
 
   let canvasHost: HTMLDivElement;
@@ -23,7 +22,8 @@
   let vw = $state(innerWidth), vh = $state(innerHeight);
   let screen = $state<Screen>("intro");
   let ready = $state(false);
-  let mode = $state<Mode>(null);
+  /* One quiet hint per gesture; each fades for good once the person has done it. */
+  let moved = $state(false), resized = $state(false);
   let keysLive = $state(false), sizeLive = $state(false);
   let remote = $state.raw<Remote>(fromLayout(LAYOUTS.streamer));
   let liveBounds = $state.raw<Bounds | null>(null);
@@ -177,16 +177,13 @@
   /* A change: resize release, key moved, key removed or key added (SPEC §2.3). */
   function commit() { acts += 1; lastAct = Date.now(); makeShown = false; templatesShown = false; }
   function check() {
-    if (screen !== "edit" || !mode || acts === 0 || makeShown) return;
+    if (screen !== "edit" || acts === 0 || makeShown) return;
     if (Date.now() - lastAct > 5000 && count > 0) makeShown = true;
   }
 
   /* ---- flow ---- */
-  function edit() { screen = "edit"; mode = null; }
-  function pick(m: Exclude<Mode, null>) {
-    mode = m; lastAct = Date.now(); acts = 0;
-    if (m === "size") sizeLive = true; else keysLive = true;
-  }
+  /* Editing starts at once: keys move and the shell resizes, no question first. */
+  function edit() { screen = "edit"; keysLive = true; sizeLive = true; lastAct = Date.now(); acts = 0; }
   function makeOrBuy() {
     screen = "buy"; makeShown = false; templatesShown = false; tier = null; failure = ""; asking = false;
     scene?.showParts(true);
@@ -195,7 +192,7 @@
   function again() {
     scene?.showParts(false);
     apply(fromLayout(LAYOUTS.streamer), false, true);
-    screen = "intro"; mode = null; keysLive = false; sizeLive = false; added = false; trayReady = false;
+    screen = "intro"; moved = false; resized = false; keysLive = false; sizeLive = false; added = false; trayReady = false;
     template = null; templatesShown = false; makeShown = false; tier = null; acts = 0; email = ""; asking = false; focus = null;
   }
 
@@ -244,8 +241,7 @@
       if (occupied(remote, col, row, d.id)) { apply(remote); return; }
       apply({ ...remote, keys: remote.keys.map((k) => (k.id === d.id ? { ...k, col, row } : k)) });
     }
-    template = null;
-    if (mode === "buttons") sizeLive = true;
+    template = null; moved = true;
     commit();
   }
 
@@ -279,8 +275,7 @@
     cancelAnimationFrame(pending); pending = 0;
     liveBounds = null; resizing = null;
     apply({ ...remote, cols, rows });
-    template = null;
-    if (mode === "size") keysLive = true;
+    template = null; resized = true;
     commit();
   }
 
@@ -407,6 +402,12 @@
         onpointerdown={(e) => rsDown("y", e)} onpointermove={rsMove} onpointerup={rsUp} onpointercancel={rsUp}></button>
       <button type="button" class="grab x" class:on={resizing === "x"} class:shown={sizeOn} aria-label="Resize width" style={`left:${stage.w - 9}px;top:${stage.h / 2 - 14}px`}
         onpointerdown={(e) => rsDown("x", e)} onpointermove={rsMove} onpointerup={rsUp} onpointercancel={rsUp}></button>
+      <div class="cue move" class:gone={moved || !!dragId} aria-hidden="true" style={`left:${stage.w / 2}px`}>
+        <svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3" /></svg>Drag a key to move it
+      </div>
+      <div class="cue size" class:gone={resized || !!resizing} aria-hidden="true" style={`left:${stage.w + 14}px;top:${stage.h / 2}px`}>
+        <svg viewBox="0 0 24 24"><path d="M4 12h16M4 12l4-4M4 12l4 4M20 12l-4-4M20 12l-4 4" /></svg>Resize
+      </div>
     {/if}
     {#if focus}
       <div class="card" role="status">
@@ -447,12 +448,6 @@
       <div class="rise d1 row">
         <button type="button" class="btn primary" onclick={edit}>Make it mine</button>
         <button type="button" class="btn ghost" onclick={makeOrBuy}>It's perfect</button>
-      </div>
-    {/if}
-    {#if isEdit && !mode}
-      <div class="rise d1 row">
-        <button type="button" class="btn ghost" onclick={() => pick("size")}>Size</button>
-        <button type="button" class="btn ghost" onclick={() => pick("buttons")}>Buttons</button>
       </div>
     {/if}
     {#if isEdit && makeShown}
@@ -586,6 +581,13 @@
     box-shadow: inset 0 1px 0 rgba(255,255,255,.1), inset 0 -2px 0 rgba(0,0,0,.45), 0 1px 0 rgba(0,0,0,.6); }
   .spare span { position: absolute; left: 12%; top: 9%; width: 76%; height: 70%; border-radius: 3px; pointer-events: none; }
   .spare:disabled { cursor: default; opacity: .35 !important; }
+  .cue { position: absolute; display: flex; align-items: center; gap: 5px; white-space: nowrap; pointer-events: none; font-size: 12px; font-weight: 500; color: #6e6e73;
+    animation: cue .6s .9s cubic-bezier(.2,.8,.2,1) both; transition: opacity .5s, transform .5s; }
+  .cue svg { width: 12px; height: 12px; fill: none; stroke: #8e8e93; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .cue.move { top: -24px; transform: translateX(-50%); }
+  .cue.size { transform: translateY(-50%); }
+  .cue.gone { opacity: 0 !important; animation: none; }
+  @keyframes cue { from { opacity: 0; } to { opacity: 1; } }
   .cta { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: #6e6e73; transition: opacity .4s; }
   .pill { width: 36px; height: 5px; border-radius: 3px; background: #d1d1d6; }
 
