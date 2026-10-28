@@ -19,6 +19,14 @@ const CAP_TINT = { ivory: BRAND.capIvory, oxblood: BRAND.oxblood, orange: BRAND.
 export type Role = "fr4" | "copper" | "plastic-dark" | "plastic-light" | "metal" | "chip" | "cap" | "battery" | "shell" | "led" | "wire" | "slot";
 export interface PartInfo { layer: number; label: string; detail: string }
 
+/** Colours for a build that is not in the brand colourway: the onboarding's black shell and
+ * per-key cap colours, with no wordmark and no legends. */
+export interface Look { shell: string; caps: Record<string, string> }
+
+function tintRole(root: THREE.Object3D, role: Role, color: string) {
+  root.traverse((o) => { if (o.userData.role === role) o.userData.tint = color; });
+}
+
 /* Marks a purchasable unit: the explode and focus never split it further. */
 function item<T extends THREE.Object3D>(object: T, id: BomId): T { object.userData.item = id; return object; }
 
@@ -143,7 +151,7 @@ function legendTexture(key: Key): THREE.CanvasTexture {
   return t;
 }
 
-export function buildKeycap(design: Design, key: Key): THREE.Group {
+export function buildKeycap(design: Design, key: Key, tint?: string): THREE.Group {
   const cap = KEYCAPS[design.keycap];
   const width = capWidth(key.w);
   const g = new THREE.Group();
@@ -151,15 +159,18 @@ export function buildKeycap(design: Design, key: Key): THREE.Group {
   const b = 0.45;
   const shape = roundedRect(-width / 2 + b, -cap.depthMm / 2 + b, width / 2 - b, cap.depthMm / 2 - b, MBK.radius - b);
   const body = slab(shape, 0, cap.heightMm, "cap", b);
-  body.userData.tint = CAP_TINT[capColour(key.action)];
+  body.userData.tint = tint ?? CAP_TINT[capColour(key.action)];
   g.add(body);
   /* Two stem sockets under the cap. */
   for (const sx of [-1, 1]) g.add(box(CHOC.stem.width + 1.2, 1.2, CHOC.stem.depth + 1.2, "cap", (sx * CHOC.stem.spacing) / 2, -0.6, 0));
-  const legend = new THREE.Mesh(new THREE.PlaneGeometry(cap.depthMm * 0.8 * key.w, cap.depthMm * 0.8),
-    new THREE.MeshBasicMaterial({ map: legendTexture(key), transparent: true, depthWrite: false }));
-  legend.rotation.x = -Math.PI / 2; legend.position.y = cap.heightMm + 0.02;
-  legend.userData.legend = true;
-  g.add(legend);
+  if (tint) for (const m of g.children) m.userData.tint = tint;
+  else {
+    const legend = new THREE.Mesh(new THREE.PlaneGeometry(cap.depthMm * 0.8 * key.w, cap.depthMm * 0.8),
+      new THREE.MeshBasicMaterial({ map: legendTexture(key), transparent: true, depthWrite: false }));
+    legend.rotation.x = -Math.PI / 2; legend.position.y = cap.heightMm + 0.02;
+    legend.userData.legend = true;
+    g.add(legend);
+  }
   g.position.y = MBK.seat;
   const holder = new THREE.Group(); holder.add(g);
   placeOnKey(holder, key);
@@ -285,7 +296,7 @@ function wordmark(width: number): THREE.Mesh {
 
 /* Three printed parts (brand book, Hardware → The shell): the shell (face and walls, open at
  * the back), the plate the switches clip into, and the lid. */
-export function buildShell(design: Design, bounds: Bounds): { lid: THREE.Group; shell: THREE.Group; plate: THREE.Group } {
+export function buildShell(design: Design, bounds: Bounds, look?: Look): { lid: THREE.Group; shell: THREE.Group; plate: THREE.Group } {
   const cap = KEYCAPS[design.keycap];
   const depth = PCB.thickness + Math.max(1.2 + 4.5, DIODE.height + 0.4 + design.battery.thicknessMm) + 1;
   const grow = SHELL_RULES.wall + SHELL.clearance, radius = SHELL_RULES.fillet;
@@ -315,14 +326,17 @@ export function buildShell(design: Design, bounds: Bounds): { lid: THREE.Group; 
   const faceMesh = slab(face, 3.6, SHELL.bezel, "shell");
   faceMesh.userData.noEdges = true; /* triangulation edges around the key openings read as scratches */
   shell.add(faceMesh);
-  const field = keyField(design);
-  const mark = wordmark(30);
-  mark.position.set(field.minX + 15, 3.6 + SHELL.bezel + 0.02, bounds.maxY - SHELL_RULES.chin / 2 + 1);
-  shell.add(mark);
+  if (!look) {
+    const field = keyField(design);
+    const mark = wordmark(30);
+    mark.position.set(field.minX + 15, 3.6 + SHELL.bezel + 0.02, bounds.maxY - SHELL_RULES.chin / 2 + 1);
+    shell.add(mark);
+  }
   /* The IR window: a 6 × 2 mm slot centred on the top edge, only on IR builds. */
   if (design.options.irTransmit || design.options.irReceive)
     shell.add(box(6, 2, grow + 0.2, "slot", cx, 2, bounds.minY - grow / 2));
   item(shell, "shell");
+  if (look) for (const g of [lid, shell, plate]) tintRole(g, "shell", look.shell);
   return { lid, shell, plate };
 }
 
@@ -331,15 +345,15 @@ function describe(lines: BomLine[], ids: BomId[]): string {
   return lines.filter((l) => ids.includes(l.id)).map((l) => `${l.qty > 1 ? `${l.qty} × ` : ""}${usd(l.unitUsd)}`).join(" + ");
 }
 
-export function buildAssembly(design: Design): THREE.Group {
+export function buildAssembly(design: Design, look?: Look): THREE.Group {
   const bounds = boardBounds(design);
   const lines = bom(design);
   const label = (id: BomId) => lines.find((l) => l.id === id)?.label ?? id;
   const root = new THREE.Group();
-  const shell = buildShell(design, bounds);
+  const shell = buildShell(design, bounds, look);
   const switches = part({ layer: 4, label: label("switch"), detail: describe(lines, ["switch"]) });
   const caps = part({ layer: 6, label: label("keycap"), detail: describe(lines, ["keycap"]) });
-  for (const key of design.keys) { switches.add(buildSwitch(key)); caps.add(buildKeycap(design, key)); }
+  for (const key of design.keys) { switches.add(buildSwitch(key)); caps.add(buildKeycap(design, key, look?.caps[key.id])); }
   const back = buildDiodes(design);
   const divider = buildDivider(design, bounds);
   if (divider) back.add(...divider.children);

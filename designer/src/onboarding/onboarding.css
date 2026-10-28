@@ -1,0 +1,29 @@
+/* First-visit onboarding (docs/onboarding/SPEC.md §9): Geist, #f5f5f7 ground, black pills.
+ * The only blue is the focus ring; the only other colour is the red key. */
+html, body { margin: 0; background: #f5f5f7; color: #1d1d1f; }
+body { font-family: Geist, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+*, *::before, *::after { box-sizing: border-box; }
+*:focus-visible { outline: 2px solid #0071e3; outline-offset: 3px; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes enter { from { opacity: 0; transform: translateY(18px) scale(.98); } to { opacity: 1; transform: none; } }
+.rise { animation: rise .75s cubic-bezier(.2,.8,.2,1) both; }
+.d1 { animation-delay: .1s; } .d2 { animation-delay: .22s; } .d3 { animation-delay: .34s; }
+
+.btn { height: 46px; padding: 0 24px; border-radius: 23px; border: 0; font: inherit; font-size: 15px; font-weight: 500; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: transform .15s, background .2s, box-shadow .2s, opacity .2s; min-width: 92px; }
+.btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: #1d1d1f; color: #fff; } .btn.primary:hover:not(:disabled) { background: #000; }
+.btn.ghost { background: #fff; color: #1d1d1f; box-shadow: 0 0 0 1px rgba(0,0,0,.14) inset; } .btn.ghost:hover { box-shadow: 0 0 0 1px rgba(0,0,0,.3) inset; }
+.link { background: none; border: 0; font: inherit; font-size: 14px; color: #6e6e73; cursor: pointer; padding: 10px 12px; border-radius: 10px; min-height: 44px; }
+.link:hover { color: #1d1d1f; }
+.h1 { margin: 0; font-size: clamp(26px, 7vw, 34px); font-weight: 600; letter-spacing: -.02em; line-height: 1.15; }
+
+/* Part names beside the exploded remote; the scene moves them every frame. */
+.part-pill { position: fixed; left: 0; top: 0; z-index: 4; height: 28px; padding: 0 11px; border: 0; border-radius: 14px; background: rgba(255,255,255,.92);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 6px 16px -10px rgba(0,0,0,.4); font: 500 12px/28px Geist, sans-serif; color: #1d1d1f; white-space: nowrap;
+  cursor: pointer; transition: opacity .3s; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.part-pill:hover { box-shadow: 0 0 0 1px rgba(0,0,0,.2), 0 6px 16px -10px rgba(0,0,0,.4); }
+
+@media (prefers-reduced-motion: reduce) { .rise { animation: none; } }

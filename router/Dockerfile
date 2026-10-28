@@ -24,9 +24,10 @@ COPY designer/src designer/src
 COPY designer/tsconfig.json designer/
 COPY router router
 
-RUN useradd --system --home /tmp router
+# /data holds notify.jsonl ("Notify me" sign-ups); mount a volume there to keep it.
+RUN useradd --system --home /tmp router && mkdir /data && chown router /data
 USER router
-ENV PORT=8790 HOME=/tmp FREEROUTING=/opt/freerouting/bin/freerouting
+ENV PORT=8790 HOME=/tmp FREEROUTING=/opt/freerouting/bin/freerouting DATA_DIR=/data
 EXPOSE 8790
 HEALTHCHECK --interval=30s --timeout=5s CMD curl -fsS http://127.0.0.1:8790/health || exit 1
 CMD ["bun", "router/server.ts"]

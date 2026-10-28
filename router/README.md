@@ -13,6 +13,8 @@ Turns a design file into a routed board and the files a board fab needs. The des
 5. `GET /jobs/:id/result` returns a zip: the routed KiCad project, a Gerber zip ready for
    JLCPCB, and `ORDER.txt`.
 
+`POST /notify` takes `{ email, tier, design }` from the onboarding's **Notify me** and appends one JSON line to `/data/notify.jsonl` (a Docker volume on grove). One request per address every 10 seconds.
+
 One job routes at a time; six may wait. Identical designs share one job. Results live for an
 hour, in memory only.
 

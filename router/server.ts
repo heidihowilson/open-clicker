@@ -2,7 +2,8 @@
  * POST /jobs (design JSON) -> 202 { id }; GET /jobs/:id -> state; GET /jobs/:id/result -> zip.
  * One job routes at a time; a short queue absorbs bursts. Results live for an hour. */
 import { createHash } from "node:crypto";
-import { mkdtemp, readdir, readFile, rm, writeFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdtemp, readdir, readFile, rm, writeFile, mkdir } from "node:fs/promises";
+import { z } from "zod";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { check, errorsIn } from "../designer/src/lib/checks";
@@ -18,6 +19,9 @@ const TIMEOUT_S = 180;
 const MAX_QUEUE = 6;
 const MAX_BODY = 64 * 1024;
 const KEEP_MS = 60 * 60 * 1000;
+const DATA_DIR = process.env.DATA_DIR ?? "/data";
+const NotifySchema = z.object({ email: z.string().trim().toLowerCase().email().max(200), tier: z.enum(["diy", "kit", "complete"]).nullable() });
+const lastNotify = new Map<string, number>();
 const ORIGINS = (process.env.ALLOWED_ORIGINS ?? "https://openremote.sethgholson.com,http://localhost:5173,http://127.0.0.1:4317").split(",");
 
 interface Report { seconds: number; segments: number; unrouted: number; problems: Record<string, number> }
@@ -131,6 +135,21 @@ Bun.serve({
       const job: Job = { id: crypto.randomUUID(), key, design, state: "queued", at: Date.now() };
       jobs.set(job.id, job); queue.push(job); void pump();
       return json(req, view(job), 202);
+    }
+
+    /* "Notify me" for Kit and Complete until there is a shop: one JSON line per request. */
+    if (req.method === "POST" && url.pathname === "/notify") {
+      let body: unknown;
+      try { body = JSON.parse(await req.text()); } catch { return json(req, { error: "The body is not JSON." }, 400); }
+      const parsed = NotifySchema.safeParse(body);
+      if (!parsed.success) return json(req, { error: "That email address does not look right." }, 400);
+      const ip = req.headers.get("cf-connecting-ip") ?? "local";
+      if (Date.now() - (lastNotify.get(ip) ?? 0) < 10_000) return json(req, { error: "One moment, then try again." }, 429);
+      lastNotify.set(ip, Date.now());
+      const design = safeParseDesign((body as { design?: unknown }).design);
+      await mkdir(DATA_DIR, { recursive: true });
+      await appendFile(join(DATA_DIR, "notify.jsonl"), JSON.stringify({ at: new Date().toISOString(), ...parsed.data, keys: design.success ? design.data.keys.length : null }) + "\n");
+      return json(req, { ok: true });
     }
 
     const m = url.pathname.match(/^\/jobs\/([0-9a-f-]{36})(\/result)?$/);

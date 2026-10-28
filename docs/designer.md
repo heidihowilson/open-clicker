@@ -56,6 +56,8 @@ Seed designs are design files in this repository. A contribution is a design fil
 
 2026-10-26: renamed Open Clicker. The designer exports a KiCad project, and **Route and get Gerbers** sends the design to the router service ([`router/`](../router/README.md), Coolify on grove at <https://clicker-router.sethgholson.com>), which routes it with Freerouting and returns Gerbers ready for JLCPCB. All four templates route fully with a clean DRC in 10–22 s.
 
+2026-10-28: the first-visit onboarding from Claude Design ([`onboarding/`](onboarding/PLAN.md)) is the home page. The remote is the real 3D model seen from above; Build or Buy swings and explodes it into its parts. One controller (XIAO ESP32-C6, IR and Bluetooth, up to 21 keys), Choc V1, MBK caps in three colours. The full designer moved to `/studio`.
+
 ## First slice
 
 1. The design-file schema and the three XIAO chip profiles.

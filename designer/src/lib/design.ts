@@ -62,6 +62,9 @@ export const DesignSchema = z.object({
     thicknessMm: z.number().min(2).max(15),
   }),
   circuit: CircuitSchema,
+  /** Optional key area in whole grid cells from the first cell, set by the onboarding editor.
+   * Without it the key area is the bounding box of the keys. */
+  outline: z.object({ cols: z.number().int().min(1).max(12), rows: z.number().int().min(1).max(24) }).optional(),
   keys: z.array(KeySchema).min(1).max(40),
 }).superRefine((d, ctx) => {
   /* Reading order (top to bottom, then left to right) numbers the switches and diodes, so it

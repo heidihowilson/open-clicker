@@ -17,6 +17,10 @@ export function corners(key: Key, widthMm: number, depthMm: number): Point[] {
 }
 
 export function keyField(design: Design): Bounds {
+  if (design.outline) {
+    /* Whole cells: key centres sit on multiples of the pitch, so cell edges are half a pitch out. */
+    return { minX: -9, minY: -8.5, maxX: design.outline.cols * 18 - 9, maxY: design.outline.rows * 17 - 8.5 };
+  }
   const depth = KEYCAPS[design.keycap].depthMm;
   const pts = design.keys.flatMap((k) => corners(k, capWidth(k.w), depth));
   return {

@@ -9,6 +9,10 @@ The prototype becomes the first thing a visitor sees, with one change from the s
 
 That moment is the point of the page: the visitor sees that this is an open design and exactly how it is built.
 
+## Status
+
+2026-10-28, owner decisions: keep to what one XIAO ESP32-C6 scans (21 keys, so battery-level reporting is off and The Boomer and The Brick are cut to fit, The Brick as a solid 3 × 6 grid); keep the bottom bay for the electronics; DIY gets the files, Kit and Complete collect an email. Steps 1–5 and the files/notify half of step 6 shipped the same day. The keypad-scanner chip is not used.
+
 ## 1. What we keep from the prototype
 
 All of it, as written in SPEC.md:
