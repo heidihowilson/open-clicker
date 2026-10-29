@@ -9,6 +9,18 @@ import { toDesign, type Remote } from "./model";
  * wide as the face's key opening. Built with Manifold, so the mesh is always watertight. */
 
 const SEGMENTS = 24;
+/* Edge rounding (mm). The bottom edge sits in the palm, so it is rounded too; below 45° the
+ * round turns into a 45° bevel, which prints flat on the bed with no support. */
+export const EDGES = { top: 4, bottom: 4 } as const;
+
+/** How far the body's side sits inside the plan outline at height z (a convex profile). */
+export function inset(z: number, height: number): number {
+  const { top, bottom } = EDGES, k = 1 - Math.SQRT1_2;
+  if (z < bottom * k) return 2 * bottom * k - z;
+  if (z < bottom) return bottom - Math.sqrt(bottom ** 2 - (bottom - z) ** 2);
+  const t = z - (height - top);
+  return t > 0 ? top - Math.sqrt(Math.max(0, top ** 2 - t ** 2)) : 0;
+}
 
 /** Heights in mm, measured from the bottom of the lid. */
 export function handHeights(r: Remote) {
@@ -27,7 +39,10 @@ export function handModel(m: ManifoldToplevel, r: Remote): { stl: Uint8Array<Arr
   const prism = (s: ReturnType<typeof rounded>, z0: number, z1: number) => s.extrude(z1 - z0).translate([0, 0, z0]);
 
   const outer = rounded((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, b.maxX - b.minX + 2 * grow, b.maxY - b.minY + 2 * grow, SHELL_RULES.fillet);
-  let body = prism(outer, 0, h.body);
+  /* The plan outline is convex, so the hull of thin slices along the edge profile is the
+   * exact rounded body. */
+  const zs = [...new Set([...Array.from({ length: 13 }, (_, i) => (EDGES.bottom * i) / 12), ...Array.from({ length: 13 }, (_, i) => h.body - EDGES.top + (EDGES.top * i) / 12)])];
+  let body = Manifold.hull(zs.map((z) => prism(outer.offset(-inset(z, h.body), "Round", 2, SEGMENTS), Math.min(z, h.body - 0.01), Math.min(z, h.body - 0.01) + 0.01)));
   const live = d.keys.filter((k) => k.id !== "placeholder");
   if (live.length) {
     const grooves = Manifold.union(live.map((k) => prism(rounded(k.x, k.y, MBK.width + 1, MBK.depth + 1, 0.6 + 0.5), h.body - h.groove, h.body + 1)));
