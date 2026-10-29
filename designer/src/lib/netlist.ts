@@ -36,7 +36,7 @@ export const FOOTPRINTS = {
   r0805: "Resistor_SMD:R_0805_2012Metric",
   c0805: "Capacitor_SMD:C_0805_2012Metric",
   led0805: "LED_SMD:LED_0805_2012Metric",
-  irLed: "LED_THT:LED_D3.0mm",
+  irLed: "LED_THT:LED_SideEmitter_Rectangular_W4.5mm_H1.6mm",
   sot23: "Package_TO_SOT_SMD:SOT-23",
   irReceiver: "OptoDevice:Vishay_MOLD-3Pin",
   hole: "MountingHole:MountingHole_2.2mm_M2",
@@ -126,7 +126,7 @@ export function netlist(design: Design): Netlist {
      * the module's 25 mA VCC output; R1 sets the current. */
     parts.push(
       { ref: "R1", value: "22R", lcsc: "C17561", footprint: FOOTPRINTS.r0805, pins: { "1": "VBAT", "2": "IR_A" } },
-      { ref: "LED1", value: "IR LED 940 nm", lcsc: "C98863", footprint: FOOTPRINTS.irLed, pins: { A: "IR_A", K: "IR_K" } },
+      { ref: "LED1", value: "IR LED 940 nm, side-looking", lcsc: "C367227", footprint: FOOTPRINTS.irLed, pins: { A: "IR_A", K: "IR_K" } },
       { ref: "Q1", value: "MMBT2222A", lcsc: "C8512", footprint: FOOTPRINTS.sot23, pins: { B: "IR_B", C: "IR_K", E: "GND" } },
       { ref: "R2", value: "1k", lcsc: "C17513", footprint: FOOTPRINTS.r0805, pins: { "1": "IR_TX", "2": "IR_B" } },
     );

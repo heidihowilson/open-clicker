@@ -140,7 +140,8 @@ To order assembled boards from JLCPCB:
    (C5333465) and the BMD-340 (C5456944) are often short; JLCPCB can pre-order them.
    Ask for BMD-340-A-R-01 or newer, not -00 (docs/hardware-sourcing.md).
 7. On the placement preview, check every part sits on its pads and faces the right way;
-   rotate any that do not. Check the USB-C, the module and the battery plug most carefully.
+   rotate any that do not. Check the USB-C, the module and the battery plug most carefully,
+   and that the IR LED's lens (LED1) faces the top edge of the board.
 8. The IR LED and IR receiver (top side, through-hole) can be added as through-hole assembly,
    or soldered by hand: they are the only through-hole parts.
 

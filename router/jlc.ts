@@ -41,7 +41,7 @@ function jlcRotation(kicad: number, bottom: boolean, correction: number): number
 /** `pos` is `kicad-cli pcb export pos --format csv --units mm --side both`. */
 export function jlcCpl(list: Netlist, pos: string): string {
   const placed = new Set(list.parts.filter((p) => p.lcsc).map((p) => p.ref));
-  const [head, ...lines] = pos.trim().split("\n").map((l) => l.split(",").map((c) => c.replace(/^"|"$/g, "")));
+  const [head, ...lines] = pos.trim().split("\n").map(csvRow);
   const col = (name: string) => head!.indexOf(name);
   const [ref, pkg, x, y, rot, side] = ["Ref", "Package", "PosX", "PosY", "Rot", "Side"].map(col);
   if ([ref, pkg, x, y, rot, side].some((i) => i! < 0)) throw new Error(`Unexpected position file header: ${head!.join(",")}`);
@@ -59,4 +59,19 @@ export function jlcCpl(list: Netlist, pos: string): string {
   const missing = [...placed].filter((r) => !rows.some((row) => row[0] === r));
   if (missing.length) throw new Error(`Parts missing from the placement file: ${missing.join(", ")}`);
   return csv([["Designator", "Mid X", "Mid Y", "Layer", "Rotation"], ...rows]);
+}
+
+/** One CSV row, honouring quoted fields: part values like "IR LED 940 nm, side-looking" carry commas. */
+function csvRow(line: string): string[] {
+  const cells: string[] = [];
+  let cell = "", quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]!;
+    if (quoted && c === '"' && line[i + 1] === '"') { cell += '"'; i++; }
+    else if (c === '"') quoted = !quoted;
+    else if (c === "," && !quoted) { cells.push(cell); cell = ""; }
+    else cell += c;
+  }
+  cells.push(cell);
+  return cells;
 }

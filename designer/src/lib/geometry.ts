@@ -1,5 +1,5 @@
 import { capWidth, KEYCAPS, type Design, type Key } from "./design";
-import { DIODE, PCB, SHELL } from "./parts-data";
+import { DIODE, IR, PCB, SHELL } from "./parts-data";
 
 export interface Point { x: number; y: number }
 export interface Bounds { minX: number; minY: number; maxX: number; maxY: number }
@@ -146,7 +146,8 @@ export function partSpots(design: Design, bounds: Bounds): Record<string, Point>
     ...row(bottom - 12.5, ["R5", "R6", "R1", "Q1", "R2"]),
     J3: { x: x0 + 5 * step + 4, y: bottom - 12.5 },
     ...Object.fromEntries(mountingHoles(bounds).map((p, i) => [`H${i + 1}`, p])),
-    LED1: { x: ledX, y: edge + 3 },
+    /* Pad line of the side-looker: its lens tip ends 1.25 mm inside the board edge. */
+    LED1: { x: ledX, y: edge + 1.25 + IR.led.lensProud + IR.led.depth - IR.led.leadsFromBack },
     U2: { x: rxX, y: edge + 4 },
     C1: { x: rxX + 5.5, y: edge + 3 },
   };

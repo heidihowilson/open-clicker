@@ -57,6 +57,8 @@ for part in spec["parts"]:
     fp.SetPath(pcbnew.KIID_PATH(f"/{part['symbol']}"))
     board.Add(fp)
     fp.SetPosition(pcbnew.VECTOR2I(mm(part["x"]), mm(part["y"])))
+    if part.get("rotate"):
+        fp.SetOrientationDegrees(part["rotate"])
     if part["back"]:
         fp.Flip(fp.GetPosition(), pcbnew.FLIP_DIRECTION_LEFT_RIGHT)
 

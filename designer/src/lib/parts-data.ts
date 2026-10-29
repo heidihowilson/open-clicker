@@ -37,8 +37,14 @@ export const XIAO_BOARD = {
 /** SOD-123 diode, one per key, on the back. */
 export const DIODE = { length: 2.7, width: 1.6, height: 1.1, lead: 0.5, offset: { x: 0, y: 4.2 } } as const;
 
-/** 3 mm IR LED and a TSOP-style receiver at the top edge. Approx envelopes. */
-export const IR = { ledDiameter: 3, ledLength: 5.3, receiver: { width: 5.6, height: 6.5, depth: 4.4 } } as const;
+/** IR LED: Everlight IR928-6C-F, a through-hole side-looker standing at the top edge with its
+ * lens facing forward (datasheet DIR-0001543). Body 4.6 wide, 4.5 tall, 1.7 deep; the Ø1.5 lens
+ * stands 0.8 proud of the front face, 2.9 above the board. The leads sit 0.75 in from the back
+ * face. Receiver: TSOP-style, approx envelope. */
+export const IR = {
+  led: { width: 4.6, height: 4.5, depth: 1.7, leadsFromBack: 0.75, lens: 1.5, lensProud: 0.8, lensZ: 2.9 },
+  receiver: { width: 5.6, height: 6.5, depth: 4.4 },
+} as const;
 
 export const PCB = { thickness: 1.6, cornerRadius: 6 } as const;
 export const SHELL = { wall: 1.8, floor: 1.5, clearance: 0.6, bezel: 1.5 } as const;

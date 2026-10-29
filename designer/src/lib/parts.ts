@@ -300,12 +300,12 @@ export function buildIr(design: Design, bounds: Bounds): THREE.Group | null {
   const g = new THREE.Group();
   const spots = partSpots(design, bounds);
   if (design.options.irTransmit) {
-    const led = new THREE.Group();
-    const body = cylinder(IR.ledDiameter, IR.ledLength - IR.ledDiameter / 2, "led");
-    body.rotation.x = Math.PI / 2; body.position.z = -0.5; led.add(body);
-    const dome = mesh(new THREE.SphereGeometry(IR.ledDiameter / 2, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), "led");
-    dome.rotation.x = -Math.PI / 2; dome.position.z = -(IR.ledLength - IR.ledDiameter / 2) / 2 - 0.5; led.add(dome);
-    led.position.set(spots.LED1!.x, 2, spots.LED1!.y);
+    /* The side-looker: an upright block with its lens on the face toward the top edge. */
+    const l = IR.led, led = new THREE.Group();
+    led.add(box(l.width, l.height, l.depth, "led", 0, l.height / 2, 0));
+    const lens = mesh(new THREE.SphereGeometry(l.lens / 2, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), "led");
+    lens.rotation.x = -Math.PI / 2; lens.scale.set(1, (2 * l.lensProud) / l.lens, 1); lens.position.set(0, l.lensZ, -l.depth / 2); led.add(lens);
+    led.position.set(spots.LED1!.x, 0, spots.LED1!.y + l.leadsFromBack - l.depth / 2);
     g.add(item(led, "ir-led"));
     /* Driver transistor and its two resistors sit on the back, in the chin. */
     const driver = box(1.3, 1.0, 2.9, "chip", spots.Q1!.x, -PCB.thickness - 0.5, spots.Q1!.y);

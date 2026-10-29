@@ -88,6 +88,8 @@ export interface SpecPart {
   /** "origin" puts the footprint origin there (switches sit on their key centre);
    * "pads" centres the footprint's pads there. */
   align: "origin" | "pads";
+  /** Degrees, counter-clockwise as KiCad counts them. */
+  rotate?: number;
   /** Pad number -> net. */
   pads: Record<string, string>;
   /** The schematic symbol's uuid, so KiCad can check the board against the schematic. */
@@ -117,6 +119,9 @@ export function boardSpec(design: Design, list: Netlist = netlist(design)): Boar
       back: !FRONT.includes(kind) && part.ref !== "LED1", align: ORIGIN.includes(kind) ? "origin" : "pads",
       pads: Object.fromEntries(padNets(part)), symbol: uuid(`${design.id}/sym/${part.ref}`),
     };
+    /* Seen from in front of its lens, the side-looker's anode is on the right. Turned half round,
+     * its anode (pad 2) sits on the board's left, so the lens looks out of the top edge. */
+    if (part.ref === "LED1") spec.rotate = 180;
     /* KiCad gives each unused symbol pin its own net, "unconnected-(U1-D9-Pad10)"; the board
      * carries the same names so the schematic parity check compares like with like. */
     for (const pin of SYMBOLS[kind].pins) {
