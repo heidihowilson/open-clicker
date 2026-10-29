@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { capWidth, KEYCAPS, type Design, type Key } from "./design";
-import { boardBounds, keyField, partSpots, SHELL_RULES, xiaoPlacement, type Bounds } from "./geometry";
+import { boardBounds, EDGES, edgeInset, keyField, partSpots, SHELL_RULES, xiaoPlacement, type Bounds } from "./geometry";
 import { CHOC, DIODE, IR, MBK, PCB, SHELL, XIAO_BOARD } from "./parts-data";
 import { CHIPS } from "./chips";
 import { capColour, glyphUrl, legendOf } from "./actions";
@@ -58,6 +58,60 @@ function slab(shape: THREE.Shape, bottom: number, height: number, role: Role, be
   const m = mesh(geometry, role);
   m.position.y = bottom + height - bevel;
   return m;
+}
+
+/* A slice of the shell between heights y0 and y1 whose outer side follows the rounded edge
+ * profile (geometry.ts edgeInset), with straight through-holes. `base` and `height` are the
+ * whole shell's lowest point and height, so the slices of lid, rim and face join up. */
+function profiled(b: Bounds, grow: number, radius: number, y0: number, y1: number, base: number, height: number, holes: THREE.Path[], role: Role): THREE.Mesh {
+  const ARC = 10;
+  const ring = (y: number): THREE.Vector2[] => {
+    const d = edgeInset(y - base, height), r = radius - d;
+    const x0 = b.minX - grow + d, x1 = b.maxX + grow - d, z0 = b.minY - grow + d, z1 = b.maxY + grow - d;
+    const pts: THREE.Vector2[] = [];
+    for (const [cx, cz, a0] of [[x1 - r, z0 + r, -Math.PI / 2], [x1 - r, z1 - r, 0], [x0 + r, z1 - r, Math.PI / 2], [x0 + r, z0 + r, Math.PI]] as const)
+      for (let i = 0; i <= ARC; i++) { const a = a0 + (i / ARC) * (Math.PI / 2); pts.push(new THREE.Vector2(cx + r * Math.cos(a), cz + r * Math.sin(a))); }
+    return pts;
+  };
+  /* Profile samples inside this slice, so the rounds stay smooth. */
+  const ys = [y0, y1];
+  for (let i = 1; i < 12; i++) {
+    const lo = base + (EDGES.bottom * i) / 12, hi = base + height - EDGES.top + (EDGES.top * i) / 12;
+    for (const y of [lo, hi]) if (y > y0 && y < y1) ys.push(y);
+  }
+  ys.sort((a, c) => a - c);
+  const pos: number[] = [];
+  const tri = (a: THREE.Vector3, c: THREE.Vector3, e: THREE.Vector3, out: THREE.Vector3) => {
+    const n = new THREE.Vector3().subVectors(c, a).cross(new THREE.Vector3().subVectors(e, a));
+    if (n.dot(out) < 0) pos.push(a.x, a.y, a.z, e.x, e.y, e.z, c.x, c.y, c.z); else pos.push(a.x, a.y, a.z, c.x, c.y, c.z, e.x, e.y, e.z);
+  };
+  const cx = (b.minX + b.maxX) / 2, cz = (b.minY + b.maxY) / 2;
+  const rings = ys.map((y) => ring(y).map((p) => new THREE.Vector3(p.x, y, p.y)));
+  for (let k = 0; k + 1 < rings.length; k++) {
+    const A = rings[k]!, B = rings[k + 1]!;
+    for (let i = 0; i < A.length; i++) {
+      const j = (i + 1) % A.length, out = new THREE.Vector3(A[i]!.x - cx, 0, A[i]!.z - cz);
+      tri(A[i]!, A[j]!, B[j]!, out); tri(A[i]!, B[j]!, B[i]!, out);
+    }
+  }
+  const holePts = holes.map((h) => { const p = h.getPoints(6); if (p[0]!.distanceTo(p[p.length - 1]!) < 1e-6) p.pop(); return p; });
+  for (const h of holePts) {
+    const hc = h.reduce((a, p) => a.add(p), new THREE.Vector2()).divideScalar(h.length);
+    for (let i = 0; i < h.length; i++) {
+      const p = h[i]!, q = h[(i + 1) % h.length]!, out = new THREE.Vector3(hc.x - p.x, 0, hc.y - p.y);
+      const a = new THREE.Vector3(p.x, y0, p.y), c = new THREE.Vector3(q.x, y0, q.y);
+      tri(a, c, new THREE.Vector3(q.x, y1, q.y), out); tri(a, new THREE.Vector3(q.x, y1, q.y), new THREE.Vector3(p.x, y1, p.y), out);
+    }
+  }
+  for (const [y, up] of [[y0, -1], [y1, 1]] as const) {
+    const contour = ring(y), all = [...contour, ...holePts.flat()];
+    const at = (i: number | undefined) => new THREE.Vector3(all[i!]!.x, y, all[i!]!.y);
+    for (const [a, c, e] of THREE.ShapeUtils.triangulateShape(contour, holePts)) tri(at(a), at(c), at(e), new THREE.Vector3(0, up, 0));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return mesh(g, role);
 }
 
 export function roundedRect(x0: number, y0: number, x1: number, y1: number, radius: number): THREE.Shape {
@@ -309,11 +363,12 @@ export function buildShell(design: Design, bounds: Bounds, look?: Look): { lid: 
   const grow = SHELL_RULES.wall + SHELL.clearance, radius = SHELL_RULES.fillet;
   const cx = (bounds.minX + bounds.maxX) / 2;
 
+  /* Lowest point and full height of the closed shell, for the edge profile. */
+  const base = -depth - SHELL.floor, height = 3.6 + SHELL.bezel - base;
+  const cavity = () => outline(bounds, SHELL.clearance, radius - grow);
   const lid = new THREE.Group();
-  const walls = outline(bounds, grow, radius - grow);
-  walls.holes.push(outline(bounds, SHELL.clearance, radius - grow));
-  lid.add(slab(outline(bounds, grow, radius - grow), -depth - SHELL.floor, SHELL.floor, "shell"));
-  lid.add(slab(walls, -depth, depth - PCB.thickness, "shell"));
+  lid.add(profiled(bounds, grow, radius, base, -depth, base, height, [], "shell"));
+  lid.add(profiled(bounds, grow, radius, -depth, -PCB.thickness, base, height, [cavity()], "shell"));
   /* USB-C opening, centred on the bottom edge. */
   lid.add(box(XIAO_BOARD.usb.width + 0.6, XIAO_BOARD.usb.height + 0.6, grow + 0.2, "slot", cx, -PCB.thickness - 1.3 - XIAO_BOARD.usb.height / 2, bounds.maxY + grow / 2));
   item(lid, "lid");
@@ -325,12 +380,8 @@ export function buildShell(design: Design, bounds: Bounds, look?: Look): { lid: 
   item(plate, "plate");
 
   const shell = new THREE.Group();
-  const face = outline(bounds, grow, radius - grow);
-  for (const key of design.keys) face.holes.push(rectHole(key, capWidth(key.w) + 1, cap.depthMm + 1));
-  const rim = outline(bounds, grow, radius - grow);
-  rim.holes.push(outline(bounds, SHELL.clearance, radius - grow));
-  shell.add(slab(rim, -PCB.thickness, PCB.thickness + 3.6, "shell"));
-  const faceMesh = slab(face, 3.6, SHELL.bezel, "shell");
+  shell.add(profiled(bounds, grow, radius, -PCB.thickness, 3.6, base, height, [cavity()], "shell"));
+  const faceMesh = profiled(bounds, grow, radius, 3.6, 3.6 + SHELL.bezel, base, height, design.keys.map((key) => rectHole(key, capWidth(key.w) + 1, cap.depthMm + 1)), "shell");
   faceMesh.userData.noEdges = true; /* triangulation edges around the key openings read as scratches */
   shell.add(faceMesh);
   if (!look) {

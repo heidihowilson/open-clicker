@@ -5,7 +5,22 @@ export interface Bounds { minX: number; minY: number; maxX: number; maxY: number
 
 /* Shell rules from the Open Clicker brand book (Hardware): the outline is the key field's
  * bounding box plus a 6 mm margin on the sides and top and a 20 mm chin at the bottom. */
-export const SHELL_RULES = { margin: 6, chin: 20, fillet: 8, edgeFillet: 3, wall: 2, wallMin: 1.6, plate: 1.5, plateCutout: 14 } as const;
+export const SHELL_RULES = { margin: 6, chin: 20, fillet: 8, wall: 2, wallMin: 1.6, plate: 1.5, plateCutout: 14 } as const;
+
+/* The shell's long edges are rounded so it sits softly in the hand (first hand-model print,
+ * 2026-10-28). The bottom edge rests in the palm, so it is rounded too; below 45° that round
+ * turns into a 45° bevel, which prints flat on the bed with no support. */
+export const EDGES = { top: 4, bottom: 4 } as const;
+
+/** How far the shell's side sits inside its plan outline at height z above its lowest
+ * point, for a shell `height` tall. Convex, so a hull of slices is the exact body. */
+export function edgeInset(z: number, height: number): number {
+  const { top, bottom } = EDGES, k = 1 - Math.SQRT1_2;
+  if (z < bottom * k) return 2 * bottom * k - z;
+  if (z < bottom) return bottom - Math.sqrt(bottom ** 2 - (bottom - z) ** 2);
+  const t = z - (height - top);
+  return t > 0 ? top - Math.sqrt(Math.max(0, top ** 2 - t ** 2)) : 0;
+}
 
 /* XIAO module envelope (Seeed OPL footprint), mounted on the back with USB-C at the bottom
  * edge. Height is the board plus the USB-C receptacle. */

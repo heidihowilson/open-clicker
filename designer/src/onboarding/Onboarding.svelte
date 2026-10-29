@@ -9,6 +9,8 @@
     quote, rowAt, shellRect, TIERS, toDesign, total, type CapColor, type Layout, type Remote, type TierId,
   } from "./model";
   import { RemoteScene } from "./scene";
+  import HandPreview from "./HandPreview.svelte";
+  import type { HandModel } from "./handmodel";
   import { FUNCTION_NAMES, type Fn, type Label } from "./labels";
 
   type Screen = "intro" | "edit" | "buy" | "done";
@@ -329,6 +331,7 @@
   /* A solid you can print and hold before buying anything: built in the page with Manifold,
    * loaded only when asked for. */
   let modelling = $state(false);
+  let hand = $state.raw<HandModel | null>(null);
   async function printModel() {
     failure = ""; modelling = true;
     try {
@@ -337,9 +340,7 @@
       ]);
       const wasm = await Module({ locateFile: () => wasmUrl });
       wasm.setup();
-      const { stl } = handModel(wasm, remote);
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(new Blob([stl], { type: "model/stl" })); a.download = "open-clicker-hand-model.stl"; a.click(); URL.revokeObjectURL(a.href);
+      hand = handModel(wasm, remote);
     } catch { failure = "The model did not build. Try again."; }
     finally { modelling = false; }
   }
@@ -373,6 +374,10 @@
 
 <div class="canvas" bind:this={canvasHost} aria-hidden="true"></div>
 <div class="labels" bind:this={labelHost}></div>
+
+{#if hand}
+  <HandPreview model={hand} onclose={() => (hand = null)} />
+{/if}
 
 {#if picker}
   {@const now = labels[picker.id]?.fn}

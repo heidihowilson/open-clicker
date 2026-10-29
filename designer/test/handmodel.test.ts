@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import Module from "manifold-3d";
-import { handHeights, handModel, inset } from "../src/onboarding/handmodel";
+import { edgeInset as inset } from "../src/lib/geometry";
+import { handHeights, handModel } from "../src/onboarding/handmodel";
 import { fromLayout, LAYOUTS, shellRect } from "../src/onboarding/model";
 
 const wasm = await Module();
