@@ -49,4 +49,5 @@ Diodes (1N4148W), resistors, the IR LED driver, the USB-C connector and the batt
 - **Power:** battery size, the charger chip and its stock, and the measured sleep current on a real board.
 - **Firmware:** the current firmware is ESP-IDF on the ESP32-C6. The nRF52840 needs new firmware (Zephyr, possibly ZMK for keys) with our IR and profile features added.
 - **Updates:** over Bluetooth through a companion app (later), or Web Bluetooth from the website (Chrome only, not Safari on iPhone).
+- **Models:** the BMD-340 footprint and 3D model are in the repo, checked against the data sheet; see [`hardware-models.md`](hardware-models.md).
 - **Designer:** the board generator, 3D parts and bill of materials still model the XIAO ESP32-C6, so they must move to the BMD-340.
