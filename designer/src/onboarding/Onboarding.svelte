@@ -521,7 +521,7 @@
         </form>
       {/if}
       {#if failure}<p class="note err">{failure}</p>{/if}
-      <button type="button" class="link rise d2" disabled={modelling} onclick={printModel}>{modelling ? "Building the model…" : "Print a hand model"}</button>
+      <button type="button" class="link rise d2" disabled={modelling} onclick={printModel}>{modelling ? "Building the model…" : "Print a mockup"}</button>
       <button type="button" class="link rise d2" onclick={back}>Back</button>
     {/if}
 

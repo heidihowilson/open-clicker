@@ -4,14 +4,14 @@
   import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
   import type { HandModel } from "./handmodel";
 
-  /* The hand model, to turn and pinch before printing it. One colour, soft light, the
+  /* The mockup, to turn and pinch before printing it. One colour, soft light, the
    * same proportions as the print. */
   let { model, onclose }: { model: HandModel; onclose: () => void } = $props();
   let host: HTMLDivElement;
 
   function download() {
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([model.stl], { type: "model/stl" })); a.download = "open-clicker-hand-model.stl"; a.click(); URL.revokeObjectURL(a.href);
+    a.href = URL.createObjectURL(new Blob([model.stl], { type: "model/stl" })); a.download = "open-clicker-mockup.stl"; a.click(); URL.revokeObjectURL(a.href);
   }
 
   onMount(() => {
@@ -52,7 +52,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div class="shade" onclick={onclose}></div>
-<div class="sheet" role="dialog" aria-label="Hand model">
+<div class="sheet" role="dialog" aria-label="Mockup">
   <div class="view" bind:this={host}></div>
   <p class="size">{model.size.map((n) => Math.round(n)).join(" × ")} mm · drag to turn, pinch to zoom</p>
   <div class="row">

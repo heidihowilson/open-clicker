@@ -49,7 +49,7 @@ export function handModel(m: ManifoldToplevel, r: Remote): HandModel {
 
 function binaryStl(verts: Float32Array, tris: Uint32Array, stride: number): Uint8Array<ArrayBuffer> {
   const n = tris.length / 3, out = new ArrayBuffer(84 + n * 50), v = new DataView(out);
-  const header = "Open Clicker hand model, mm";
+  const header = "Open Clicker mockup, mm";
   for (let i = 0; i < header.length; i++) v.setUint8(i, header.charCodeAt(i));
   v.setUint32(80, n, true);
   for (let t = 0; t < n; t++) {
