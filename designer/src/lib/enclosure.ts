@@ -1,5 +1,6 @@
 import type { CrossSection, Manifold, ManifoldToplevel } from "manifold-3d";
 import { binaryStl } from "../onboarding/handmodel";
+import { bambuProject } from "./bambu";
 import { capWidth, KEYCAPS, type Design } from "./design";
 import { boardBounds, EDGES, edgeInset, mountingHoles, partSpots, SCREW, SHELL_RULES, stack, USB_C } from "./geometry";
 import { IR, SHELL } from "./parts-data";
@@ -95,24 +96,41 @@ export async function loadManifold(): Promise<ManifoldToplevel> {
   return m;
 }
 
-/** Both pieces as STL, placed for printing: each sits on its flat side at z = 0, top of the remote toward +Y. */
-export function enclosureStl(e: Enclosure): { top: Uint8Array<ArrayBuffer>; bottom: Uint8Array<ArrayBuffer> } {
+/** Both pieces placed for printing: each sits on its flat side at z = 0, top of the remote toward +Y. */
+export function printable(e: Enclosure): Enclosure {
+  const place = (piece: Manifold) => {
+    const solid = piece.mirror([0, 1, 0]);
+    return solid.translate([0, 0, -solid.boundingBox().min[2]]);
+  };
+  return { top: place(e.top), bottom: place(e.bottom) };
+}
+
+/** Everything the shell download holds: both STLs, a Bambu Studio project and the print notes. */
+export function shellFiles(e: Enclosure, title: string): Record<string, Uint8Array<ArrayBuffer> | string> {
+  const p = printable(e);
   const stl = (piece: Manifold) => {
-    const solid = piece.mirror([0, 1, 0]), box = solid.boundingBox();
-    const placed = solid.translate([0, 0, -box.min[2]]);
-    const mesh = placed.getMesh();
+    const mesh = piece.getMesh();
     return binaryStl(mesh.vertProperties, mesh.triVerts, mesh.numProp);
   };
-  return { top: stl(e.top), bottom: stl(e.bottom) };
+  return {
+    "shell-top.stl": stl(p.top),
+    "shell-bottom.stl": stl(p.bottom),
+    "shell-bambu-a1.3mf": bambuProject([{ name: "shell-top", solid: p.top }, { name: "shell-bottom", solid: p.bottom }], title),
+    "PRINT.txt": PRINT_NOTES,
+  };
 }
 
 export const PRINT_NOTES = `Open Clicker shell: two pieces, no supports.
+
+shell-bambu-a1.3mf  Bambu Studio project: both pieces on one plate of a Bambu Lab A1 with
+                    Bambu PLA Basic and the settings below. Open it, check the printer and
+                    filament, slice and print. For another printer, use the two STLs.
 
 shell-top.stl     Print flat side down (as exported). The face, the keycap pockets and the
                   1.2 mm switch plate are one piece.
 shell-bottom.stl  Print floor down (as exported).
 
-Suggested: PLA or PETG, 0.2 mm layers, 3 walls, 15 % infill. The plate is 1.2 mm thick;
+Settings: PLA or PETG, 0.2 mm layers, 3 walls, 15 % infill. The plate is 1.2 mm thick;
 print it at 0.2 mm layers so the Choc switches clip in firmly.
 
 Assembly:

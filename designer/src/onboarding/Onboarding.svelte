@@ -351,10 +351,9 @@
   async function printShell() {
     failure = ""; shelling = true;
     try {
-      const [wasm, { enclosure, enclosureStl, PRINT_NOTES }, { zip }] = await Promise.all([manifold(), import("../lib/enclosure"), import("../lib/zip")]);
-      const stl = enclosureStl(enclosure(wasm, toDesign(remote)));
+      const [wasm, { enclosure, shellFiles }, { zip }] = await Promise.all([manifold(), import("../lib/enclosure"), import("../lib/zip")]);
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(new Blob([zip({ "shell-top.stl": stl.top, "shell-bottom.stl": stl.bottom, "PRINT.txt": PRINT_NOTES })], { type: "application/zip" }));
+      a.href = URL.createObjectURL(new Blob([zip(shellFiles(enclosure(wasm, toDesign(remote)), "Open Clicker shell"))], { type: "application/zip" }));
       a.download = "open-clicker-shell.zip"; a.click(); URL.revokeObjectURL(a.href);
     } catch { failure = "The shell did not build. Try again."; }
     finally { shelling = false; }
