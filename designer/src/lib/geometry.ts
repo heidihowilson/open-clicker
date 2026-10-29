@@ -22,9 +22,16 @@ export function edgeInset(z: number, height: number): number {
   return t > 0 ? top - Math.sqrt(Math.max(0, top ** 2 - t ** 2)) : 0;
 }
 
-/* XIAO module envelope (Seeed OPL footprint), mounted on the back with USB-C at the bottom
- * edge. Height is the board plus the USB-C receptacle. */
-export const XIAO = { widthMm: 17.8, lengthMm: 21, heightMm: 4.5, usbEndMm: 12.05 } as const;
+/* The BMD-340 module, from its footprint (origin at the pad-field centre): the body runs
+ * x -9.5..5.5 and y ±5.1, the antenna end is the -x end and its RF keep-out is the last
+ * 4.4 mm (data sheet figure 12). On the back of the board x mirrors, so the antenna faces +x. */
+export const MODULE = { bodyMin: -9.5, bodyMax: 5.5, halfDepth: 5.1, antenna: 4.4 } as const;
+/* USB-C receptacle (KiCad's HRO TYPE-C-31-M-12 footprint): the body is ±4.47 × ±3.65 mm
+ * about the origin, plug face at +y. */
+export const USB_C = { faceMm: 3.65, halfWidth: 4.47 } as const;
+/** Narrowest board that fits the chin parts: battery plug, USB-C, two rows of small parts
+ * and the module. */
+export const CHIN_MIN_WIDTH = 58;
 export const CLEARANCE_MM = 0.5;
 
 export function corners(key: Key, widthMm: number, depthMm: number): Point[] {
@@ -60,24 +67,32 @@ export function collisions(design: Design): [string, string][] {
 }
 
 /* The board is the shell outline less the wall; the PCB sits 0.5 mm inside the wall. Grown,
- * if needed, to hold the XIAO and battery. */
+ * if needed, to hold the chin parts and the battery. */
 export function boardBounds(design: Design): Bounds {
   const f = keyField(design);
   let minX = f.minX - SHELL_RULES.margin, maxX = f.maxX + SHELL_RULES.margin;
-  const need = Math.max(XIAO.widthMm, design.battery.widthMm) + 2;
+  const need = Math.max(CHIN_MIN_WIDTH, design.battery.widthMm + 2);
   if (maxX - minX < need) { const c = (minX + maxX) / 2; minX = c - need / 2; maxX = c + need / 2; }
   return { minX, minY: f.minY - SHELL_RULES.margin, maxX, maxY: f.maxY + SHELL_RULES.chin };
 }
 
-export function xiaoPlacement(bounds: Bounds): Point {
-  /* Footprint origin, placed so the USB-C face sits flush with the board edge. */
-  return { x: (bounds.minX + bounds.maxX) / 2, y: bounds.maxY - XIAO.usbEndMm };
+/** Module footprint origin on the board: bottom-right of the chin, antenna end 0.5 mm in
+ * from the right edge, clear of the rounded corner. */
+export function modulePlacement(bounds: Bounds): Point {
+  return { x: bounds.maxX - 0.5 + MODULE.bodyMin, y: bounds.maxY - 11 };
 }
 
-/* Battery sits between the top edge and the XIAO. */
+/* Battery sits under the keys, above the chin. */
 export function batteryFits(design: Design, bounds: Bounds): boolean {
-  const room = bounds.maxY - bounds.minY - XIAO.lengthMm - 4;
+  const room = bounds.maxY - bounds.minY - SHELL_RULES.chin - 4;
   return design.battery.lengthMm <= room && design.battery.widthMm <= bounds.maxX - bounds.minX - 2;
+}
+
+/** No copper under or beside the module's antenna (data sheet §5.2): the antenna end of the
+ * module to the board edge, and 5 mm beyond its sides. */
+export function keepouts(_design: Design, bounds: Bounds): { minX: number; minY: number; maxX: number; maxY: number; why: string }[] {
+  const m = modulePlacement(bounds);
+  return [{ minX: m.x - MODULE.bodyMin - MODULE.antenna, maxX: bounds.maxX, minY: m.y - MODULE.halfDepth - 5, maxY: bounds.maxY, why: "BMD-340 antenna" }];
 }
 
 /* Grid cell of a key, counting from the top-left of the key field (for "column 2, row 5"). */
@@ -88,23 +103,24 @@ export function cellOf(design: Design, key: Key): { col: number; row: number } {
 }
 
 /* Where the small parts go, shared by the 3D model and the KiCad board. The IR LED and
- * receiver sit on the top edge; everything else sits in the chin beside the XIAO, clear of
- * the switch sockets. */
+ * receiver sit on the top edge. The chin holds, left to right along the bottom edge, the
+ * battery plug, USB-C and the module, with two rows of small parts above the USB-C. */
 export function partSpots(design: Design, bounds: Bounds): Record<string, Point> {
-  const xiao = xiaoPlacement(bounds);
-  const cx = (bounds.minX + bounds.maxX) / 2, edge = bounds.minY;
-  const side = XIAO.widthMm / 2 + 3.5;
+  const cx = (bounds.minX + bounds.maxX) / 2, edge = bounds.minY, bottom = bounds.maxY;
   const ledX = cx - (design.options.irReceive ? 5 : 0), rxX = cx + (design.options.irTransmit ? 5 : 0);
+  const module = modulePlacement(bounds);
+  const usbX = Math.min(cx, module.x + MODULE.bodyMin - 1 - USB_C.halfWidth);
+  /* Rows start clear of the battery plug's courtyard (9.2 mm wide, 2.4 mm in from the edge). */
+  const x0 = bounds.minX + 13.6, step = 3.8;
+  const row = (y: number, refs: string[]) => Object.fromEntries(refs.map((ref, i) => [ref, { x: x0 + i * step, y }]));
   return {
-    U1: xiao,
-    J1: { x: xiao.x - side, y: xiao.y - 4 },
-    J2: { x: xiao.x - side, y: xiao.y + 4 },
-    R3: { x: xiao.x + side, y: xiao.y - 2 },
-    R4: { x: xiao.x + side, y: xiao.y + 2 },
+    U1: module,
+    J1: { x: usbX, y: bottom - USB_C.faceMm },
+    J2: { x: bounds.minX + 7, y: bottom - 11 },
+    ...row(bottom - 16.5, ["U3", "C2", "C3", "R7", "R8", "LED2"]),
+    ...row(bottom - 12.5, ["R5", "R6", "R1", "Q1", "R2"]),
+    J3: { x: x0 + 5 * step + 4, y: bottom - 12.5 },
     LED1: { x: ledX, y: edge + 3 },
-    R1: { x: xiao.x + side + 5, y: xiao.y - 5 },
-    Q1: { x: xiao.x + side + 5, y: xiao.y - 1 },
-    R2: { x: xiao.x + side + 5, y: xiao.y + 3 },
     U2: { x: rxX, y: edge + 4 },
     C1: { x: rxX + 5.5, y: edge + 3 },
   };

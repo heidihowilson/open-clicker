@@ -13,7 +13,8 @@ const BOARD_SCRIPT = join(import.meta.dir, "board.py");
 const ROUTE_SCRIPT = join(import.meta.dir, "route.py");
 const VERIFY_SCRIPT = join(import.meta.dir, "verify.py");
 const FOOTPRINTS = join(import.meta.dir, "footprints");
-const TIMEOUT_S = 180;
+/* The module board routes in about a minute; the densest 21-key layouts need longer. */
+const TIMEOUT_S = 300;
 
 export interface Report { seconds: number; segments: number; unrouted: number; stubs_removed: number; problems: Record<string, number>; silk: Record<string, number>; parity: Record<string, number>; gerbers: { outline_mm: number[]; holes: number; drilled: number; problems: string[] } }
 
@@ -53,7 +54,7 @@ export async function buildBoard(design: Design): Promise<{ zip: Uint8Array<Arra
       ...Object.entries(report.parity).map(([k, n]) => `schematic mismatch: ${n} × ${k.replace(/_/g, " ")}`),
       ...report.gerbers.problems,
     ];
-    if (failed.length) throw Object.assign(new Error(`The board did not pass its checks: ${failed.join("; ")}.`), { detail: (routed as { parity_detail?: string[] }).parity_detail ?? [] });
+    if (failed.length) throw Object.assign(new Error(`The board did not pass its checks: ${failed.join("; ")}.`), { detail: [...((routed as { parity_detail?: string[] }).parity_detail ?? []), ...((routed as { problem_detail?: string[] }).problem_detail ?? [])] });
 
     const gerberFiles: Record<string, string> = {};
     for (const f of await readdir(gerberDir)) gerberFiles[f] = await readFile(join(gerberDir, f), "utf8");

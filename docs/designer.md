@@ -8,7 +8,7 @@ Owner direction, 2026-10-24. This document keeps hardware, firmware and the app 
 
 Every remote is one **design file** (JSON, schema-validated). It is the single source of truth:
 
-- **Controller:** a chip profile, for example XIAO ESP32-C3, XIAO ESP32-C6 or XIAO nRF52840.
+- **Controller:** the u-blox BMD-340 (nRF52840) module, placed by the board factory.
 - **Keys:** positions and rotations on a grid, each with an action (Home, OK, a profile slot, IR power and so on) and a keycap family (Choc V1 with MCC or MBK).
 - **Options:** IR transmitter, IR receiver, battery cell.
 - **Shell:** a shell family (for example EXO, FOLD, LOOP, FIN, OFFSET, KEEL) and its parameters.

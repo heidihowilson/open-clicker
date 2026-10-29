@@ -3,14 +3,16 @@
 Every footprint on an Open Clicker board comes from a published library; none is drawn by hand.
 
 - KiCad's official libraries (shipped in the `kicad/kicad:9.0-full` image): `Diode_SMD:D_SOD-123`,
-  `Resistor_SMD:R_0805_2012Metric`, `Capacitor_SMD:C_0805_2012Metric`, `Package_TO_SOT_SMD:SOT-23`,
-  `Connector_JST:JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical`, `LED_THT:LED_D3.0mm`,
-  `OptoDevice:Vishay_MOLD-3Pin`, `Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical`.
-- `OpenClicker.pretty/` holds the two that KiCad does not ship, copied unchanged:
-  - `XIAO-ESP32-C6-DIP.kicad_mod` from Seeed Studio's
-    [OPL KiCad library](https://github.com/Seeed-Studio/OPL_Kicad_Library) (CC BY-SA 4.0). All XIAO
-    boards share this 14-pin footprint.
+  `Resistor_SMD:R_0805_2012Metric`, `Capacitor_SMD:C_0805_2012Metric`, `LED_SMD:LED_0805_2012Metric`,
+  `Package_TO_SOT_SMD:SOT-23`, `Package_TO_SOT_SMD:SOT-23-5`,
+  `Connector_JST:JST_PH_S2B-PH-SM4-TB_1x02-1MP_P2.00mm_Horizontal`,
+  `Connector:Tag-Connect_TC2030-IDC-NL_2x03_P1.27mm_Vertical`, `Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12`, `LED_THT:LED_D3.0mm`,
+  `OptoDevice:Vishay_MOLD-3Pin`.
+- `OpenClicker.pretty/` holds the ones KiCad does not ship:
   - `SW_Hotswap_Kailh_Choc_V1.kicad_mod` from [kiswitch](https://github.com/kiswitch/kiswitch)
-    (MIT or CC BY-SA 4.0), the library most keyboard projects use.
+    (MIT or CC BY-SA 4.0), the library most keyboard projects use. Copied unchanged 2026-10-28.
+  - `u-blox_BMD-340.kicad_mod` from the LCSC/EasyEDA library entry for JLCPCB part C5456944,
+    fetched with `easyeda2kicad` on 2026-10-29. Only the name and the 3D-model link were
+    changed. Its pads were checked against the u-blox data sheet; see `docs/hardware-models.md`.
 
-Copied 2026-10-28. To update one, copy the new file over the old and run `router/test.sh`.
+To update one, copy the new file over the old and run `router/test.sh`.

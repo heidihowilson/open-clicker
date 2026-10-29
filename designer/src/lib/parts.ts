@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { capWidth, KEYCAPS, type Design, type Key } from "./design";
-import { boardBounds, EDGES, edgeInset, keyField, partSpots, SHELL_RULES, xiaoPlacement, type Bounds } from "./geometry";
-import { CHOC, DIODE, IR, MBK, PCB, SHELL, XIAO_BOARD } from "./parts-data";
+import { boardBounds, EDGES, edgeInset, keyField, MODULE, partSpots, SHELL_RULES, USB_C, type Bounds } from "./geometry";
+import { CHOC, DIODE, IR, MBK, PCB, SHELL } from "./parts-data";
 import { CHIPS } from "./chips";
 import { capColour, glyphUrl, legendOf } from "./actions";
 import { bom, usd, type BomId, type BomLine } from "./bom";
@@ -140,12 +140,6 @@ function placeOnKey(object: THREE.Object3D, key: Key) {
   object.position.x = key.x; object.position.z = key.y;
 }
 
-/* XIAO footprint coordinates -> design coordinates. The module hangs under the board,
- * components down, long axis along design y with USB-C toward the bottom edge. */
-function xiaoToDesign(at: { x: number; y: number }, fx: number, fy: number) {
-  return { x: at.x + fy, y: at.y + fx };
-}
-
 export function buildPcb(design: Design, bounds: Bounds): THREE.Group {
   const g = new THREE.Group();
   const shape = outline(bounds, 0, PCB.cornerRadius);
@@ -239,33 +233,35 @@ export function buildKeycap(design: Design, key: Key, tint?: string, legendMap?:
   return item(holder, "keycap");
 }
 
-export function buildXiao(design: Design, bounds: Bounds): THREE.Group {
-  const at = xiaoPlacement(bounds);
-  const X = XIAO_BOARD;
+/* The chin, under the board: the BMD-340 module, USB-C, the battery plug and the charger's
+ * small parts. Sizes are the data-sheet envelopes (docs/hardware-models.md); on the back of
+ * the board x mirrors, so the module's antenna end faces +x. */
+export function buildController(design: Design, bounds: Bounds): THREE.Group {
+  const spots = partSpots(design, bounds), m = spots.U1!;
   const g = new THREE.Group();
-  const top = -PCB.thickness - 0.05; /* XIAO pad side against the main board */
-  const c0 = xiaoToDesign(at, X.minX, -X.halfWidth), c1 = xiaoToDesign(at, X.maxX, X.halfWidth);
-  const shape = roundedRect(Math.min(c0.x, c1.x), Math.min(c0.y, c1.y), Math.max(c0.x, c1.x), Math.max(c0.y, c1.y), 1);
-  for (const fy of [-X.padRow, X.padRow]) for (let i = -3; i <= 3; i++) {
-    const p = xiaoToDesign(at, i * X.padPitch, fy);
-    shape.holes.push(circleHole(p.x, p.y, X.padDrill));
-  }
-  g.add(slab(shape, top - X.thickness, X.thickness, "fr4"));
-  for (const fy of [-X.padRow, X.padRow]) for (let i = -3; i <= 3; i++) {
-    const p = xiaoToDesign(at, i * X.padPitch, fy);
-    const ring = mesh(new THREE.RingGeometry(X.padDrill / 2, X.padDiameter / 2, 20), "copper");
-    ring.rotation.x = Math.PI / 2; ring.position.set(p.x, top - X.thickness - 0.02, p.y);
-    g.add(ring);
-  }
-  const under = top - X.thickness;
-  const usbAt = xiaoToDesign(at, X.maxX - X.usb.depth / 2 + X.usb.overhang, 0);
-  g.add(box(X.usb.width, X.usb.height, X.usb.depth, "metal", usbAt.x, under - X.usb.height / 2, usbAt.y));
-  const chipAt = xiaoToDesign(at, X.chip.x, X.chip.y);
-  g.add(box(X.chip.size, X.chip.height, X.chip.size, "chip", chipAt.x, under - X.chip.height / 2, chipAt.y));
-  const antAt = xiaoToDesign(at, X.antenna.x, X.antenna.y);
-  g.add(box(X.antenna.depth, X.antenna.height, X.antenna.width, "plastic-light", antAt.x, under - X.antenna.height / 2, antAt.y));
-  for (const b of X.buttons) { const p = xiaoToDesign(at, b.x, b.y); g.add(box(2.6, 1.0, 3.2, "metal", p.x, under - 0.5, p.y)); }
+  const under = -PCB.thickness;
+  /* Module: 0.5 mm board under the full body, shield can over all but the antenna end. */
+  const body = { minX: m.x - MODULE.bodyMax, maxX: m.x - MODULE.bodyMin };
+  g.add(box(body.maxX - body.minX, 0.5, 2 * MODULE.halfDepth, "fr4", (body.minX + body.maxX) / 2, under - 0.25, m.y));
+  const can = { minX: body.minX + 0.5, maxX: body.maxX - MODULE.antenna };
+  g.add(box(can.maxX - can.minX, 1.4, 9.2, "metal", (can.minX + can.maxX) / 2, under - 0.5 - 0.7, m.y));
   return item(g, "controller");
+}
+
+export function buildChin(design: Design, bounds: Bounds): THREE.Group {
+  const spots = partSpots(design, bounds), under = -PCB.thickness;
+  const g = new THREE.Group();
+  const usb = spots.J1!;
+  /* USB-C shell, 8.94 × 3.26 × 7.3 mm, centred on the footprint origin. */
+  g.add(item(box(2 * USB_C.halfWidth, 3.26, 2 * USB_C.faceMm, "metal", usb.x, under - 1.63, usb.y), "usb"));
+  const j2 = spots.J2!;
+  g.add(item(box(6, 4.25, 4.5, "plastic-light", j2.x, under - 2.125, j2.y), "battery-connector"));
+  const u3 = spots.U3!;
+  g.add(item(box(1.6, 1.1, 2.9, "chip", u3.x, under - 0.55, u3.y), "charger"));
+  for (const ref of ["C2", "C3"]) g.add(item(smdPart(spots[ref]!.x, spots[ref]!.y, "chip", 1.25), "capacitor"));
+  for (const ref of ["R5", "R6", "R7", "R8"]) g.add(item(smdResistor(spots[ref]!.x, spots[ref]!.y), "resistor"));
+  g.add(item(smdPart(spots.LED2!.x, spots.LED2!.y, "led", 0.8), "status-led"));
+  return g;
 }
 
 export function buildDiodes(design: Design): THREE.Group {
@@ -285,8 +281,7 @@ export function buildDiodes(design: Design): THREE.Group {
 export function buildBattery(design: Design, bounds: Bounds): THREE.Group {
   const b = design.battery;
   const g = new THREE.Group();
-  const at = xiaoPlacement(bounds);
-  const cx = (bounds.minX + bounds.maxX) / 2, cy = at.y - 10.5 - 2 - b.lengthMm / 2;
+  const cx = (bounds.minX + bounds.maxX) / 2, cy = bounds.maxY - SHELL_RULES.chin - 4.5 - b.lengthMm / 2;
   const top = -PCB.thickness - DIODE.height - 0.4;
   const body = roundedRect(cx - b.widthMm / 2 + 0.6, cy - b.lengthMm / 2 + 3.6, cx + b.widthMm / 2 - 0.6, cy + b.lengthMm / 2 - 0.6, 0.8);
   g.add(slab(body, top - b.thicknessMm, b.thicknessMm, "battery", 0.6));
@@ -312,7 +307,7 @@ export function buildIr(design: Design, bounds: Bounds): THREE.Group | null {
     dome.rotation.x = -Math.PI / 2; dome.position.z = -(IR.ledLength - IR.ledDiameter / 2) / 2 - 0.5; led.add(dome);
     led.position.set(spots.LED1!.x, 2, spots.LED1!.y);
     g.add(item(led, "ir-led"));
-    /* Driver transistor and its two resistors sit on the back, in the chin beside the XIAO. */
+    /* Driver transistor and its two resistors sit on the back, in the chin. */
     const driver = box(1.3, 1.0, 2.9, "chip", spots.Q1!.x, -PCB.thickness - 0.5, spots.Q1!.y);
     g.add(item(driver, "ir-driver"));
     for (const ref of ["R1", "R2"]) g.add(item(smdResistor(spots[ref]!.x, spots[ref]!.y), "resistor"));
@@ -324,21 +319,21 @@ export function buildIr(design: Design, bounds: Bounds): THREE.Group | null {
   return g;
 }
 
+/* An 0805 part: body and two end caps, hanging under the board. */
+function smdPart(x: number, z: number, role: Role, height: number): THREE.Group {
+  const r = new THREE.Group();
+  r.add(box(1.4, height, 1.25, role, 0, -height / 2, 0));
+  for (const sx of [-1, 1]) r.add(box(0.3, height + 0.02, 1.26, "metal", sx * 0.85, -height / 2, 0));
+  r.position.set(x, -PCB.thickness, z);
+  return r;
+}
+
 function smdResistor(x: number, z: number): THREE.Group {
   const r = new THREE.Group();
   r.add(box(1.4, 0.5, 1.25, "chip", 0, -0.25, 0));
   for (const sx of [-1, 1]) r.add(box(0.3, 0.52, 1.26, "metal", sx * 0.85, -0.25, 0));
   r.position.set(x, -PCB.thickness, z);
   return r;
-}
-
-/* Battery divider: two resistors beside the XIAO when the module has none built in. */
-export function buildDivider(design: Design, bounds: Bounds): THREE.Group | null {
-  if (!design.options.batterySense || CHIPS[design.chip].batteryDividerBuiltIn) return null;
-  const spots = partSpots(design, bounds);
-  const g = new THREE.Group();
-  for (const ref of ["R3", "R4"]) g.add(item(smdResistor(spots[ref]!.x, spots[ref]!.y), "resistor"));
-  return g;
 }
 
 /* The wordmark on the chin: "Open" over "Clicker", Fraunces 900, oxblood, left-aligned with
@@ -369,8 +364,9 @@ export function buildShell(design: Design, bounds: Bounds, look?: Look): { lid: 
   const lid = new THREE.Group();
   lid.add(profiled(bounds, grow, radius, base, -depth, base, height, [], "shell"));
   lid.add(profiled(bounds, grow, radius, -depth, -PCB.thickness, base, height, [cavity()], "shell"));
-  /* USB-C opening, centred on the bottom edge. */
-  lid.add(box(XIAO_BOARD.usb.width + 0.6, XIAO_BOARD.usb.height + 0.6, grow + 0.2, "slot", cx, -PCB.thickness - 1.3 - XIAO_BOARD.usb.height / 2, bounds.maxY + grow / 2));
+  /* USB-C opening, in line with the receptacle on the bottom edge. */
+  const usbX = partSpots(design, bounds).J1!.x;
+  lid.add(box(2 * USB_C.halfWidth + 0.6, 3.26 + 0.6, grow + 0.2, "slot", usbX, -PCB.thickness - 1.63, bounds.maxY + grow / 2));
   item(lid, "lid");
 
   const plate = new THREE.Group();
@@ -413,9 +409,8 @@ export function buildAssembly(design: Design, look?: Look): THREE.Group {
   const caps = part({ layer: 6, label: label("keycap"), detail: describe(lines, ["keycap"]) });
   for (const key of design.keys) { switches.add(buildSwitch(key)); caps.add(buildKeycap(design, key, look?.caps[key.id], look?.legends?.[key.id])); }
   const back = buildDiodes(design);
-  const divider = buildDivider(design, bounds);
-  if (divider) back.add(...divider.children);
-  back.userData.part = { layer: 2, label: "Diodes · resistors", detail: describe(lines, ["diode", "resistor"]) };
+  back.add(...buildChin(design, bounds).children);
+  back.userData.part = { layer: 2, label: "USB-C · charger · diodes", detail: describe(lines, ["usb", "charger", "battery-connector", "diode", "resistor", "capacitor", "status-led"]) };
   const wrap = (g: THREE.Group | null, layer: number, ids: BomId[]) => {
     if (!g) return null;
     const outer = part({ layer, label: ids.map(label).join(" · "), detail: describe(lines, ids) });
@@ -425,7 +420,7 @@ export function buildAssembly(design: Design, look?: Look): THREE.Group {
   const ir = buildIr(design, bounds);
   if (ir) ir.userData.part = { layer: 4, label: "IR", detail: describe(lines, ["ir-led", "ir-driver", "ir-receiver"]) };
   const parts = [
-    wrap(shell.lid, 0, ["lid"]), wrap(buildBattery(design, bounds), 1, ["battery"]), wrap(buildXiao(design, bounds), 1.4, ["controller"]),
+    wrap(shell.lid, 0, ["lid"]), wrap(buildBattery(design, bounds), 1, ["battery"]), wrap(buildController(design, bounds), 1.4, ["controller"]),
     back, wrap(buildPcb(design, bounds), 3, ["pcb"]), wrap(shell.plate, 3.6, ["plate"]), switches, ir, wrap(shell.shell, 5, ["shell"]), caps,
   ];
   for (const p of parts) if (p) root.add(p);

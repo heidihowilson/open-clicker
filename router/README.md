@@ -8,8 +8,8 @@ Turns a design file into a routed board and the files a board fab needs. The des
 2. `src/lib/kicad.ts` writes the schematic and a board spec: which footprint goes where, on which
    side, and which net each pad is on. Footprints come only from published libraries
    ([footprints/README.md](footprints/README.md)).
-3. `board.py` has KiCad 9 build the board from that spec, flipping parts to the back itself. The
-   XIAO's flip and rotation are searched until its pins land where the module sits.
+3. `board.py` has KiCad 9 build the board from that spec, flipping parts to the back itself, and
+   adds the rule areas: no copper under or beside the BMD-340's antenna.
 4. `route.py`: KiCad exports Specctra DSN, [Freerouting](https://github.com/freerouting/freerouting)
    routes it, KiCad imports the routes and removes any dead-end stubs, then `kicad-cli` runs the
    design-rule check with schematic parity and plots the Gerbers and drill files.

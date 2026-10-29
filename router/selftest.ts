@@ -16,7 +16,8 @@ const cases: [string, Design][] = [
   ...[tile, slab, deck, column].map((j): [string, Design] => { const d = parseDesign(j); return [d.template, d]; }),
 ];
 let failed = 0;
-for (const [name, design] of cases) {
+const only = process.env.ONLY ? process.env.ONLY.split(",") : null;
+for (const [name, design] of cases.filter(([n]) => !only || only.includes(n))) {
   try {
     const r = await buildBoard(design);
     await writeFile(`${out}/${name}.zip`, r.zip);

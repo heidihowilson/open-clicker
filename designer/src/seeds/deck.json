@@ -4,7 +4,7 @@
   "revision": 0,
   "name": "Coffee table Deck",
   "template": "deck",
-  "chip": "xiao-esp32c3",
+  "chip": "bmd-340",
   "keycap": "choc-mbk",
   "options": {
     "irTransmit": true,

@@ -3,4 +3,4 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 docker build -q -f router/Dockerfile -t open-clicker-router:test .
-docker run --rm -v /tmp/open-clicker-selftest:/tmp/selftest open-clicker-router:test bun router/selftest.ts /tmp/selftest
+docker run --rm -e ONLY="${ONLY:-}" -v /tmp/open-clicker-selftest:/tmp/selftest open-clicker-router:test bun router/selftest.ts /tmp/selftest

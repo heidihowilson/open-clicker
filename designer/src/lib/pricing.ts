@@ -44,15 +44,18 @@ function kitParts(design: Design, a: PricingAssumptions): PriceLine[] {
   const keys = design.keys.length;
   const b = boardBounds(design);
   const areaMm2 = (b.maxX - b.minX) * (b.maxY - b.minY);
-  const resistors = (design.options.irTransmit ? 2 : 0) + (design.options.batterySense && !chip.batteryDividerBuiltIn ? 2 : 0);
+  const resistors = 4 + (design.options.irTransmit ? 2 : 0);
   /* JLCPCB-style assembly: per-order setup and stencil, plus a fee for each unique extended part
-   * (hot-swap socket and battery connector), spread over the batch. */
-  const setup = (8 + 1.5 + 2 * 3) / a.batch;
-  const joints = keys * 2 * 2 + resistors * 2 + (design.options.irTransmit ? 3 : 0) + 4;
+   * (module, USB-C, charger, hot-swap socket, battery connector), spread over the batch. */
+  const setup = (8 + 1.5 + 5 * 3) / a.batch;
+  const joints = 68 + 16 + 5 + keys * 2 * 2 + resistors * 2 + 2 * 2 + 2 + (design.options.irTransmit ? 3 : 0) + 4;
   const lines: PriceLine[] = [
-    { label: `${chip.label}`, qty: 1, unitUsd: round(chip.priceUsd * 0.9), basis: "Seeed, about 10% off at batch quantity" },
+    { label: `${chip.label}`, qty: 1, unitUsd: round(chip.priceUsd * 0.9), basis: "JLCPCB, about 10% off at batch quantity" },
+    { label: "USB-C receptacle", qty: 1, unitUsd: 0.19, basis: "JLCPCB C165948" },
+    { label: "Charger IC MCP73831", qty: 1, unitUsd: 0.6, basis: "JLCPCB C424093, batch" },
+    { label: "Capacitor 4.7 µF, LED", qty: 3, unitUsd: 0.01, basis: "LCSC basic parts" },
     { label: "PCB, bare", qty: 1, unitUsd: round(0.2 + areaMm2 * 0.0001), basis: `JLCPCB-style board at ${a.batch} pieces, by area` },
-    { label: "Assembly setup, share", qty: 1, unitUsd: round(setup), basis: `$8 setup + $1.50 stencil + 2 extended-part fees, over ${a.batch}` },
+    { label: "Assembly setup, share", qty: 1, unitUsd: round(setup), basis: `$8 setup + $1.50 stencil + 5 extended-part fees, over ${a.batch}` },
     { label: "Assembly joints", qty: joints, unitUsd: 0.0017, basis: "Per solder joint" },
     { label: "Hot-swap socket, Choc", qty: keys, unitUsd: 0.2, basis: "Kailh CPG135001S30, LCSC; lets switches push in without solder" },
     { label: "1N4148W diode", qty: keys, unitUsd: 0.01, basis: "LCSC basic part, reel price" },
@@ -61,7 +64,7 @@ function kitParts(design: Design, a: PricingAssumptions): PriceLine[] {
     { label: design.keycap === "choc-mbk" ? "MBK keycap 1u" : "MoErgo MCC keycap", qty: keys, unitUsd: design.keycap === "choc-mbk" ? 0.7 : 0.65, basis: "Bulk estimate" },
     { label: "LiPo cell with JST-PH lead", qty: 1, unitUsd: round(2 + design.battery.capacityMah * 0.004), basis: "Bulk estimate by capacity" },
   ];
-  if (resistors) lines.push({ label: "Resistor 0805", qty: resistors, unitUsd: 0.005, basis: "LCSC basic part" });
+  lines.push({ label: "Resistor 0805", qty: resistors, unitUsd: 0.005, basis: "LCSC basic part" });
   if (design.options.irTransmit) lines.push(
     { label: "IR LED 940 nm", qty: 1, unitUsd: 0.06, basis: "Bulk" },
     { label: "MMBT2222A transistor", qty: 1, unitUsd: 0.02, basis: "LCSC basic part" },
@@ -89,24 +92,24 @@ export function tiers(design: Design, a: PricingAssumptions = DEFAULT_PRICING): 
   const diyLines = retail.map(fromBom);
   const shellFilament = sum(retail.filter((l) => l.kind === "print").map(fromBom));
 
-  const kit = [...kitParts(design, a), labor(12, "XIAO solder, flash and test", a), labor(5, "Kitting", a), { label: "Packaging", qty: 1, unitUsd: 1, basis: "Bag and card" }];
+  const kit = [...kitParts(design, a), labor(6, "Flash bootloader and test", a), labor(5, "Kitting", a), { label: "Packaging", qty: 1, unitUsd: 1, basis: "Bag and card" }];
   const kitCost = sum(kit);
 
-  const built = [...kitParts(design, a), ...shellPrint(design), labor(12, "XIAO solder, flash and test", a),
+  const built = [...kitParts(design, a), ...shellPrint(design), labor(6, "Flash bootloader and test", a),
     labor(15, "Assembly and final test", a), { label: "Packaging", qty: 1, unitUsd: 2, basis: "Box and insert" }];
   const builtCost = sum(built);
 
   return [
     {
       id: "kit", title: "Kit",
-      summary: "Buy every part at retail, order bare PCBs, solder everything, print the shell.",
-      youDo: "You solder, you print.",
+      summary: "Order the assembled board from a PCB factory with our files, buy the rest at retail, print the shell.",
+      youDo: "You order, you print.",
       lines: diyLines, costUsd: sum(diyLines), priceUsd: null,
-      extraUsd: round(2 * 4 + 10), extraNote: "Plus once per order: bare PCBs come in fives (about $8 for the spares) and about $10 shipping. Solder and tools not included.",
+      extraUsd: round(2 * 4 + 10), extraNote: "Plus once per order: factory boards come in fives (about $8 for the spares) and about $10 shipping. Flashing the bootloader needs a $10 SWD probe once.",
     },
     {
       id: "half-built", title: "Half-built",
-      summary: "Assembled PCB with hot-swap sockets, XIAO fitted and flashed, switches, keycaps and battery.",
+      summary: "Factory-assembled PCB, flashed and tested, with switches, keycaps and battery.",
       youDo: "We solder, you print.",
       lines: kit, costUsd: kitCost, priceUsd: price(kitCost),
       extraUsd: shellFilament, extraNote: "Plus your own filament for the shell.",

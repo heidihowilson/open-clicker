@@ -4,7 +4,7 @@
   "revision": 0,
   "name": "Everyday Slab",
   "template": "slab",
-  "chip": "xiao-nrf52840",
+  "chip": "bmd-340",
   "keycap": "choc-mcc",
   "options": {
     "irTransmit": true,

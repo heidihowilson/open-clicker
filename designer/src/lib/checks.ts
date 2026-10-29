@@ -24,7 +24,7 @@ export function check(design: Design): Finding[] {
   else {
     out.push({ level: "info", badge: "Routed", message: `Matrix ${plan.rows.length} × ${plan.columns.length} on ${plan.rows.length + plan.columns.length} pins. Every column can wake the controller, so any key wakes the remote.` });
     const strapped = [...plan.rows, ...plan.columns].filter((p) => p.strapping);
-    if (strapped.length) out.push({ level: "warning", badge: "Boot pin in use", message: `The matrix uses ${strapped.map((p) => `${p.id} (${p.chipPin})`).join(", ")}. Holding a key during reset could change the boot mode.` });
+    if (strapped.length) out.push({ level: "warning", badge: "Boot pin in use", message: `The matrix uses ${strapped.map((p) => `${p.id} (${p.id})`).join(", ")}. Holding a key during reset could change the boot mode.` });
   }
 
   for (const [a, b] of collisions(design)) out.push({ level: "error", badge: `${a} hits ${b}`, keyId: a, message: `Keys ${a} and ${b} overlap. Keys sit on an 18 × 17 mm grid; move one a cell.` });

@@ -30,7 +30,7 @@ Hot-swap switch sockets are a separate, related request. They let a builder chan
 The Designer prices every design three ways (`designer/src/lib/pricing.ts`):
 
 1. **Solder and print yourself:** the builder buys every part at retail, orders bare PCBs (in fives), solders everything including the diodes, and prints the shell.
-2. **No-solder kit, print your own shell:** we supply the PCB assembled by the fab with diodes, resistors, hot-swap sockets and a battery connector, the XIAO fitted and flashed, plus switches, keycaps and battery. The builder pushes in switches and caps and prints the shell.
+2. **No-solder kit, print your own shell:** we supply the PCB assembled by the fab with diodes, resistors, hot-swap sockets and a battery connector, the BMD-340 module placed by the fab and flashed, plus switches, keycaps and battery. The builder pushes in switches and caps and prints the shell.
 3. **Fully assembled:** a finished, tested remote in one of our printed shells.
 
 Tiers 2 and 3 show our batch cost and a price at a chosen gross margin. Batch size, margin and labor rate are editable assumptions. For the Classic column on an ESP32-C6, with 50-unit batches, a 40% margin and $30/h labor, the estimates are about $27 DIY (plus about $18 once per PCB order), $53 for the kit and $67 assembled. Shipping and tax are excluded. These are planning numbers, not quotes.

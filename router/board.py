@@ -14,6 +14,11 @@ SYSTEM = os.environ.get("KICAD9_FOOTPRINT_DIR", "/usr/share/kicad/footprints")
 mm = pcbnew.FromMM
 
 board = pcbnew.BOARD()
+# Design rules inside JLCPCB's standard 2-layer process (0.127 mm track and space, 0.3 mm via
+# drill), with margin: 0.2 mm tracks, 0.15 mm clearance, 0.5/0.3 mm vias. The module's
+# 0.5 mm pads sit 0.55 mm apart on its inner rows; KiCad's defaults leave no way between them.
+nc = board.GetDesignSettings().m_NetSettings.GetDefaultNetclass()
+nc.SetTrackWidth(mm(0.2)); nc.SetClearance(mm(0.15)); nc.SetViaDiameter(mm(0.5)); nc.SetViaDrill(mm(0.3))
 board.GetTitleBlock().SetTitle(spec["name"])
 board.GetTitleBlock().SetRevision(str(spec["revision"]))
 board.GetTitleBlock().SetComment(0, f"Design {spec['id']}")
@@ -42,13 +47,6 @@ def pad_box(fp):
     ys = [pcbnew.ToMM(p.GetPosition().y) for p in pads] or [pcbnew.ToMM(fp.GetPosition().y)]
     return (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
 
-def pad_at(fp, number):
-    # A castellated module has a hole and an edge pad per pin; the hole is the pin.
-    pads = sorted((p for p in fp.Pads() if p.GetNumber() == number), key=lambda p: not p.HasHole())
-    if not pads:
-        raise KeyError(number)
-    return pcbnew.ToMM(pads[0].GetPosition().x), pcbnew.ToMM(pads[0].GetPosition().y)
-
 for part in spec["parts"]:
     fp = load(part["footprint"])
     fp.SetReference(part["ref"])
@@ -62,24 +60,7 @@ for part in spec["parts"]:
     if part["back"]:
         fp.Flip(fp.GetPosition(), pcbnew.FLIP_DIRECTION_LEFT_RIGHT)
 
-    expect = part.get("expect")
-    if expect:
-        # Search KiCad's own rotations until the named pads land where the module really sits.
-        best = None
-        for angle in (0, 90, 180, 270):
-            fp.SetOrientationDegrees(angle)
-            fp.SetPosition(pcbnew.VECTOR2I(mm(part["x"]), mm(part["y"])))
-            first = next(iter(expect))
-            px, py = pad_at(fp, first)
-            fp.Move(pcbnew.VECTOR2I(mm(expect[first][0] - px), mm(expect[first][1] - py)))
-            err = max(math.dist(pad_at(fp, n), xy) for n, xy in expect.items())
-            if best is None or err < best[0]:
-                best = (err, angle, fp.GetPosition())
-        fp.SetOrientationDegrees(best[1])
-        fp.SetPosition(best[2])
-        if best[0] > 0.01:
-            sys.exit(f"{part['ref']}: no orientation puts its pads where the module sits (off by {best[0]:.3f} mm)")
-    elif part["align"] == "pads":
+    if part["align"] == "pads":
         cx, cy = pad_box(fp)
         fp.Move(pcbnew.VECTOR2I(mm(part["x"] - cx), mm(part["y"] - cy)))
 
@@ -107,6 +88,40 @@ seg(o["minX"] + r, o["minY"], o["maxX"] - r, o["minY"]); arc(o["maxX"] - r, o["m
 seg(o["maxX"], o["minY"] + r, o["maxX"], o["maxY"] - r); arc(o["maxX"] - r, o["maxY"] - r, 0)
 seg(o["maxX"] - r, o["maxY"], o["minX"] + r, o["maxY"]); arc(o["minX"] + r, o["maxY"] - r, 90)
 seg(o["minX"], o["maxY"] - r, o["minX"], o["minY"] + r); arc(o["minX"] + r, o["minY"] + r, 180)
+
+# A 0.5 mm band inside the edge with no tracks or vias: KiCad's copper-to-edge clearance. The
+# router keeps its own 0.15 mm clearance to the outline, which is not enough on its own.
+EDGE = 0.5
+band = pcbnew.ZONE(board)
+band.SetIsRuleArea(True)
+band.SetDoNotAllowTracks(True); band.SetDoNotAllowVias(True); band.SetDoNotAllowCopperPour(True)
+band.SetDoNotAllowPads(False); band.SetDoNotAllowFootprints(False)
+band.SetLayerSet(pcbnew.LSET.AllCuMask())
+band.SetZoneName("Board edge")
+ring = band.Outline()
+ring.NewOutline()
+for x, y in ((o["minX"] - 1, o["minY"] - 1), (o["maxX"] + 1, o["minY"] - 1), (o["maxX"] + 1, o["maxY"] + 1), (o["minX"] - 1, o["maxY"] + 1)):
+    ring.Append(mm(x), mm(y))
+ring.NewHole()
+ri = r - EDGE
+for cx, cy, a0 in ((o["maxX"] - r, o["minY"] + r, 270), (o["maxX"] - r, o["maxY"] - r, 0), (o["minX"] + r, o["maxY"] - r, 90), (o["minX"] + r, o["minY"] + r, 180)):
+    for i in range(9):
+        a = math.radians(a0 + i * 90 / 8)
+        ring.Append(mm(cx + ri * math.cos(a)), mm(cy + ri * math.sin(a)), -1, 0)
+board.Add(band)
+
+# Rule areas: no tracks, vias or copper fill, on both copper layers (the module antenna).
+for k in spec.get("keepouts", []):
+    z = pcbnew.ZONE(board)
+    z.SetIsRuleArea(True)
+    z.SetDoNotAllowTracks(True); z.SetDoNotAllowVias(True); z.SetDoNotAllowCopperPour(True)
+    z.SetDoNotAllowPads(False); z.SetDoNotAllowFootprints(False)
+    z.SetLayerSet(pcbnew.LSET.AllCuMask())
+    z.SetZoneName(k["why"])
+    poly = z.Outline(); poly.NewOutline()
+    for x, y in ((k["minX"], k["minY"]), (k["maxX"], k["minY"]), (k["maxX"], k["maxY"]), (k["minX"], k["maxY"])):
+        poly.Append(mm(x), mm(y))
+    board.Add(z)
 
 board.Save(out)
 print(json.dumps({"footprints": len(spec["parts"]), "nets": len(nets)}))

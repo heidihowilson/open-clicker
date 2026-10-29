@@ -31,13 +31,25 @@ seconds = round(time.time() - started, 1)
 if not pcbnew.ImportSpecctraSES(board, ses):
     sys.exit("KiCad could not import the routes.")
 
-# Freerouting can leave a stub of track that leads nowhere. Remove dangling tracks, as KiCad's
-# own "Clean up tracks" does, until none is left; the DRC below confirms the result.
+# Freerouting can leave a stub of track that leads nowhere, and removing it can leave a via that
+# joins nothing. Remove dangling tracks and vias that touch copper on fewer than two layers, as
+# KiCad's own "Clean up tracks" does, until none is left; the DRC below confirms the result.
+def via_layers(v):
+    pos, net, layers = v.GetPosition(), v.GetNetCode(), set()
+    for t in board.GetTracks():
+        if t.GetClass() == "PCB_TRACK" and t.GetNetCode() == net and pos in (t.GetStart(), t.GetEnd()):
+            layers.add(t.GetLayer())
+    for pad in board.GetPads():
+        if pad.GetNetCode() == net and pad.HitTest(pos):
+            layers.update(l for l in (pcbnew.F_Cu, pcbnew.B_Cu) if pad.IsOnLayer(l))
+    return len(layers)
+
 removed = 0
 while True:
     board.BuildConnectivity()
     conn = board.GetConnectivity()
     dangling = [t for t in board.GetTracks() if t.GetClass() == "PCB_TRACK" and conn.TestTrackEndpointDangling(t, False)]
+    dangling += [v for v in board.GetTracks() if v.GetClass() == "PCB_VIA" and via_layers(v) < 2]
     if not dangling:
         break
     for t in dangling:
@@ -61,6 +73,7 @@ violations = drc.get("violations", [])
 problems = count(v for v in violations if v["type"] not in SILK)
 silk = count(v for v in violations if v["type"] in SILK)
 parity = count(drc.get("schematic_parity", []))
+problem_detail = [f'{v["type"]}: ' + "; ".join(i["description"] for i in v.get("items", [])) for v in violations if v["type"] not in SILK][:12]
 parity_detail = ["; ".join([v["description"]] + [i["description"] for i in v.get("items", [])]) for v in drc.get("schematic_parity", [])][:4]
 unrouted = len(drc.get("unconnected_items", []))
 # Footprints are loaded from libraries the board's own project does not list; that note is expected.
@@ -69,6 +82,6 @@ for noise in ("lib_footprint_issues", "lib_footprint_mismatch"):
 
 layers = "F.Cu,B.Cu,F.Paste,B.Paste,F.Silkscreen,B.Silkscreen,F.Mask,B.Mask,Edge.Cuts"
 subprocess.run(["kicad-cli", "pcb", "export", "gerbers", "--layers", layers, "-o", gerbers + "/", pcb], check=True, capture_output=True)
-subprocess.run(["kicad-cli", "pcb", "export", "drill", "--format", "excellon", "--excellon-separate-th", "-o", gerbers + "/", pcb], check=True, capture_output=True)
+subprocess.run(["kicad-cli", "pcb", "export", "drill", "--format", "excellon", "--excellon-separate-th", "--excellon-oval-format", "route", "-o", gerbers + "/", pcb], check=True, capture_output=True)
 
-print(json.dumps({"seconds": seconds, "segments": len(board.GetTracks()), "stubs_removed": removed, "unrouted": unrouted, "problems": problems, "silk": silk, "parity": parity, "parity_detail": parity_detail}))
+print(json.dumps({"seconds": seconds, "segments": len(board.GetTracks()), "stubs_removed": removed, "unrouted": unrouted, "problems": problems, "silk": silk, "parity": parity, "parity_detail": parity_detail, "problem_detail": problem_detail}))

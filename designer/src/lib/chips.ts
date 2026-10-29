@@ -1,20 +1,17 @@
 /* Chip profiles are data. Every number names its source; "measured" values come only from our
  * bench, and a missing value is shown as unmeasured rather than guessed. */
 
-export type PinId = "D0" | "D1" | "D2" | "D3" | "D4" | "D5" | "D6" | "D7" | "D8" | "D9" | "D10";
-
 export interface Pin {
-  id: PinId;
-  /** Chip pin name as the vendor prints it, for example GPIO2 or P0.02. */
-  chipPin: string;
-  /** Firmware pin number where the chip family uses plain integers (ESP32), otherwise null. */
-  gpio: number | null;
+  /** Chip pin name as the vendor prints it, for example P0.13. */
+  id: string;
   /** Can wake the chip from its lowest-power sleep. */
   wake: boolean;
   /** Analog input usable for battery sensing. */
   adc: boolean;
   /** Read at reset; a matrix line here needs care. */
   strapping: boolean;
+  /** Standard drive, under 10 kHz only: fine for keys, too slow for the 38 kHz IR carrier. */
+  slow: boolean;
 }
 
 export interface Figure {
@@ -26,108 +23,70 @@ export interface Figure {
 export interface Chip {
   id: ChipId;
   label: string;
-  /** Plain-language reason to pick it (Cheapest, All-rounder, Long battery). */
+  /** Plain-language reason to pick it. */
   category: string;
   blurb: string;
   priceUsd: number;
+  /** Pins free for keys and IR, best first. */
   pins: Pin[];
+  /** Every module pad: pad number -> pad name from the data sheet. */
+  pads: Record<string, string>;
   deepSleepUa: Figure | null;
   connectedIdleUa: Figure | null;
-  /** True when the board already divides battery voltage into an analog input. */
+  /** True when the chip measures its own battery voltage, with no divider on the board. */
   batteryDividerBuiltIn: boolean;
-  firmware: "esp-idf" | "not-ported";
+  firmware: "ported" | "not-ported";
   sources: string[];
 }
 
-export const CHIP_IDS = ["xiao-esp32c3", "xiao-esp32c6", "xiao-nrf52840"] as const;
+export const CHIP_IDS = ["bmd-340"] as const;
 export type ChipId = (typeof CHIP_IDS)[number];
 
-function pin(id: PinId, chipPin: string, flags: Partial<Pick<Pin, "wake" | "adc" | "strapping">> = {}): Pin {
-  const match = /^GPIO(\d+)$/.exec(chipPin);
-  return {
-    id,
-    chipPin,
-    gpio: match?.[1] ? Number(match[1]) : null,
-    wake: flags.wake ?? false,
-    adc: flags.adc ?? false,
-    strapping: flags.strapping ?? false,
-  };
-}
+/* BMD-340 pad table, u-blox data sheet UBX-19033353 R13, table 2 (pads 1–68). */
+const BMD340_PADS: Record<string, string> = {
+  "1": "GND", "2": "GND", "3": "GND", "4": "GND", "5": "GND", "6": "P0.25", "7": "P0.26", "8": "P0.27", "9": "P0.28", "10": "P0.29",
+  "11": "P0.30", "12": "P0.31", "13": "P0.00", "14": "P0.01", "15": "P0.02", "16": "GND", "17": "VCC", "18": "GND", "19": "P0.03", "20": "P0.04",
+  "21": "P0.05", "22": "P0.06", "23": "P0.07", "24": "P0.08", "25": "P0.09", "26": "P0.10", "27": "P0.11", "28": "P0.12", "29": "GND", "30": "GND",
+  "31": "P0.13", "32": "P0.14", "33": "P0.15", "34": "P0.16", "35": "P0.17", "36": "P0.21", "37": "P0.19", "38": "P0.20", "39": "P0.18", "40": "P0.22",
+  "41": "P0.23", "42": "P0.24", "43": "SWCLK", "44": "SWDIO", "45": "GND", "46": "GND", "47": "GND", "48": "P1.05", "49": "P1.06", "50": "P1.07",
+  "51": "P1.08", "52": "P1.09", "53": "P1.10", "54": "P1.11", "55": "GND", "56": "P1.00", "57": "P1.01", "58": "P1.02", "59": "P1.03", "60": "P1.04",
+  "61": "P1.12", "62": "P1.13", "63": "P1.14", "64": "P1.15", "65": "VCCH", "66": "VBUS", "67": "USB-D-", "68": "USB-D+",
+};
+/* Pads the data sheet marks "standard drive, low frequency I/O only (<10 kHz)". */
+const SLOW = new Set(["P0.02", "P0.03", "P0.09", "P0.10", "P0.28", "P0.29", "P0.30", "P0.31", "P1.01", "P1.02", "P1.03", "P1.04", "P1.05", "P1.06", "P1.07", "P1.10", "P1.11", "P1.12", "P1.13", "P1.14", "P1.15"]);
+const AIN = new Set(["P0.02", "P0.03", "P0.04", "P0.05", "P0.28", "P0.29", "P0.30", "P0.31"]);
+/* Only pads on the two outer rings, so a 2-layer board can route out to every one: first the
+ * side facing the keys, then the side facing the USB-C, then the bottom edge. Left out:
+ * P0.00/P0.01 (32 kHz crystal pins), P0.09/P0.10 (NFC pins, GPIO only after a UICR change),
+ * P0.18 (reset) and every inner-ring pad. */
+const BUDGET = ["P0.13", "P0.15", "P0.17", "P0.19", "P0.23", "P0.14", "P0.16", "P0.21", "P0.20", "P0.22", "P0.24",
+  "P1.12", "P1.13", "P1.14", "P1.15", "P0.03", "P0.05", "P0.07", "P0.11",
+  "P0.26", "P0.28", "P0.30", "P0.02", "P0.25", "P0.27", "P0.29", "P0.31"];
+/** Ground pads on the inner ring (data sheet figure 12). The module joins all its grounds
+ * inside; the board leaves these two unwired until it has a ground fill to reach them. */
+export const BMD340_INNER_GND = ["18", "55"];
 
 export const CHIPS: Record<ChipId, Chip> = {
-  "xiao-esp32c3": {
-    id: "xiao-esp32c3",
-    label: "XIAO ESP32-C3",
-    category: "Cheapest",
-    blurb: "Lowest price and runs today's firmware. Shortest battery life of the three.",
-    priceUsd: 5,
-    pins: [
-      pin("D0", "GPIO2", { wake: true, adc: true, strapping: true }),
-      pin("D1", "GPIO3", { wake: true, adc: true }),
-      pin("D2", "GPIO4", { wake: true, adc: true }),
-      pin("D3", "GPIO5", { wake: true }),
-      pin("D4", "GPIO6"),
-      pin("D5", "GPIO7"),
-      pin("D6", "GPIO21"),
-      pin("D7", "GPIO20"),
-      pin("D8", "GPIO8", { strapping: true }),
-      pin("D9", "GPIO9", { strapping: true }),
-      pin("D10", "GPIO10"),
-    ],
-    deepSleepUa: { value: 44, source: "vendor", note: "Seeed wiki, deep sleep mode" },
-    connectedIdleUa: null,
-    batteryDividerBuiltIn: false,
-    firmware: "esp-idf",
-    sources: ["https://wiki.seeedstudio.com/XIAO_ESP32C3_Getting_Started/"],
-  },
-  "xiao-esp32c6": {
-    id: "xiao-esp32c6",
-    label: "XIAO ESP32-C6",
-    category: "All-rounder",
-    blurb: "About the same price, sleeps about three times better, and has a smart-home radio. Runs today's firmware.",
-    priceUsd: 5.5,
-    pins: [
-      pin("D0", "GPIO0", { wake: true, adc: true }),
-      pin("D1", "GPIO1", { wake: true, adc: true }),
-      pin("D2", "GPIO2", { wake: true, adc: true }),
-      pin("D3", "GPIO21"),
-      pin("D4", "GPIO22"),
-      pin("D5", "GPIO23"),
-      pin("D6", "GPIO16"),
-      pin("D7", "GPIO17"),
-      pin("D8", "GPIO19"),
-      pin("D9", "GPIO20"),
-      pin("D10", "GPIO18"),
-    ],
-    deepSleepUa: { value: 15, source: "vendor", note: "Seeed wiki, deep sleep at 3.8 V" },
-    connectedIdleUa: null,
-    batteryDividerBuiltIn: false,
-    firmware: "esp-idf",
-    sources: ["https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/"],
-  },
-  "xiao-nrf52840": {
-    id: "xiao-nrf52840",
-    label: "XIAO nRF52840",
+  "bmd-340": {
+    id: "bmd-340",
+    label: "u-blox BMD-340",
     category: "Long battery",
-    blurb: "The keyboard chip: months per charge and every pin wakes it. Twice the price; firmware not ported yet.",
-    priceUsd: 10,
-    pins: [
-      pin("D0", "P0.02", { wake: true, adc: true }),
-      pin("D1", "P0.03", { wake: true, adc: true }),
-      pin("D2", "P0.28", { wake: true, adc: true }),
-      pin("D3", "P0.29", { wake: true, adc: true }),
-      pin("D4", "P0.04", { wake: true, adc: true }),
-      pin("D5", "P0.05", { wake: true, adc: true }),
-      pin("D6", "P1.11", { wake: true }),
-      pin("D7", "P1.12", { wake: true }),
-      pin("D8", "P1.13", { wake: true }),
-      pin("D9", "P1.14", { wake: true }),
-      pin("D10", "P1.15", { wake: true }),
-    ],
+    blurb: "nRF52840 module: Bluetooth LE and Thread, months per charge, every pin wakes it. Certified radio; factory-placed.",
+    priceUsd: 9.75,
+    pins: BUDGET.map((id) => ({ id, wake: true, adc: AIN.has(id), strapping: false, slow: SLOW.has(id) })),
+    pads: BMD340_PADS,
     deepSleepUa: null,
     connectedIdleUa: null,
+    /* The nRF52840 measures VDDH (the module's VCCH, wired to the cell) through VDDHDIV5. */
     batteryDividerBuiltIn: true,
     firmware: "not-ported",
-    sources: ["https://wiki.seeedstudio.com/XIAO_BLE/"],
+    sources: ["https://content.u-blox.com/sites/default/files/BMD-340_DataSheet_UBX-19033353.pdf"],
   },
 };
+
+/** Pad number of a named module pin; the first match for names that repeat (GND). */
+export function padOf(chip: Chip, name: string): string {
+  const pad = Object.keys(chip.pads).find((p) => chip.pads[p] === name);
+  if (!pad) throw new Error(`${chip.label} has no pin ${name}`);
+  return pad;
+}

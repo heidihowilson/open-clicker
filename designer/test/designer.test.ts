@@ -10,7 +10,7 @@ import { parseDesign, readingOrder, type Design } from "../src/lib/design";
 import { kicadProject } from "../src/lib/kicad";
 import { keyCapacity, netlist } from "../src/lib/netlist";
 import { zip } from "../src/lib/zip";
-import { keymap, keymapHeader } from "../src/lib/exports";
+import { keymap } from "../src/lib/exports";
 import { boardBounds, collisions, keyField } from "../src/lib/geometry";
 import { planPins } from "../src/lib/matrix";
 import { DEFAULT_PRICING, tiers } from "../src/lib/pricing";
@@ -19,7 +19,6 @@ const tile = parseDesign(tileJson);
 const slab = parseDesign(slabJson);
 const deck = parseDesign(deckJson);
 const column = parseDesign(columnJson);
-const withChip = (d: Design, chip: Design["chip"]): Design => ({ ...d, chip });
 
 test("every template validates and has no errors on its default controller", () => {
   for (const d of [tile, slab, deck, column]) expect(errorsIn(check(d)).map((f) => f.message)).toEqual([]);
@@ -49,23 +48,17 @@ test("the Deck's 2u play key spans two columns without touching its neighbours",
   expect(deck.keys.find((k) => k.id === "play")?.w).toBe(2);
 });
 
-test("columns are wake pins on every controller", () => {
-  for (const chip of ["xiao-esp32c3", "xiao-esp32c6", "xiao-nrf52840"] as const) {
-    const plan = planPins(withChip(tile, chip));
+test("every pin wakes the module, and the IR transmitter gets a full-speed pin", () => {
+  for (const d of [tile, slab, deck, column]) {
+    const plan = planPins({ ...d, options: { ...d.options, irTransmit: true } });
     if (!plan.ok) throw new Error(plan.reason);
     expect(plan.columns.every((p) => p.wake)).toBe(true);
+    expect(plan.irTransmit?.slow).toBe(false);
   }
 });
 
-test("the 21-key Slab only fits the controller whose every pin can wake", () => {
-  expect(planPins(slab).ok).toBe(true);
-  expect(planPins(withChip(slab, "xiao-esp32c6")).ok).toBe(false);
-});
-
-test("C3 keeps strapping pins off the IR driver", () => {
-  const plan = planPins(withChip(column, "xiao-esp32c3"));
-  if (!plan.ok) throw new Error(plan.reason);
-  expect(plan.irTransmit?.strapping).toBe(false);
+test("old XIAO files load as BMD-340 designs", () => {
+  expect(parseDesign({ ...tile, chip: "xiao-esp32c6" }).chip).toBe("bmd-340");
 });
 
 test("a second power key and IR power without a transmitter are reported", () => {
@@ -74,11 +67,10 @@ test("a second power key and IR power without a transmitter are reported", () =>
   expect(check(tile).some((f) => f.badge === "Power needs IR")).toBe(true);
 });
 
-test("keymap and header agree", () => {
+test("the keymap places every key and names module pins", () => {
   const km = keymap(column);
   expect(km.map.flat().filter(Boolean).length).toBe(column.keys.length);
-  expect(keymapHeader(column)).toContain("#define OR_MATRIX_ROWS");
-  expect(() => keymapHeader(slab)).toThrow();
+  expect(km.columns.every((p) => /^P[01]\.\d\d$/.test(p))).toBe(true);
 });
 
 test("the BOM has one line per purchasable or printed unit", () => {
@@ -130,16 +122,26 @@ test("the netlist is deterministic and wires every key column to row through its
   expect(a.parts.find((p) => p.ref === "SW1")!.keyId).toBe(readingOrder(tile.keys)[0]!.id);
 });
 
-test("IR and battery sensing add their parts and nets", () => {
+test("IR adds its parts and nets; the battery needs no divider", () => {
   const n = netlist({ ...tile, options: { irTransmit: true, irReceive: true, batterySense: true } });
-  for (const ref of ["LED1", "Q1", "R1", "R2", "U2", "C1", "R3", "R4"]) expect(n.parts.some((p) => p.ref === ref)).toBe(true);
-  for (const net of ["IR_TX", "IR_RX", "VBAT_SENSE"]) expect(n.nets).toContain(net);
+  for (const ref of ["LED1", "Q1", "R1", "R2", "U2", "C1"]) expect(n.parts.some((p) => p.ref === ref)).toBe(true);
+  for (const net of ["IR_TX", "IR_RX"]) expect(n.nets).toContain(net);
+  expect(n.parts.some((p) => p.ref === "R3")).toBe(false);
 });
 
-test("key capacity matches the planner", () => {
-  const cap = keyCapacity(tile);
-  expect(cap).toBeGreaterThanOrEqual(tile.keys.length);
-  expect(planPins({ ...tile, keys: Array.from({ length: cap + 1 }, (_, i) => ({ id: `k${i}`, x: i * 18, y: 0, w: 1 as const, action: "none" as const, label: "" })) }).ok).toBe(false);
+test("power follows the BMD-340 data sheet: cell on VCCH, USB on VBUS and the charger", () => {
+  const u1 = netlist(tile).parts.find((p) => p.ref === "U1")!;
+  expect(u1.pins["65"]).toBe("VBAT");
+  expect(u1.pins["17"]).toBe("VCC");
+  expect(u1.pins["66"]).toBe("VBUS");
+  expect([u1.pins["67"], u1.pins["68"]]).toEqual(["USB_DN", "USB_DP"]);
+  for (const pad of ["1", "16", "29"]) expect(u1.pins[pad]).toBe("GND");
+  const charger = netlist(tile).parts.find((p) => p.ref === "U3")!;
+  expect([charger.pins.VDD, charger.pins.VBAT]).toEqual(["VBUS", "VBAT"]);
+});
+
+test("the module has pins for every key a design file can hold", () => {
+  expect(keyCapacity(tile)).toBe(40);
 });
 
 test("the KiCad project is deterministic and the board spec uses published footprints", () => {
@@ -150,7 +152,10 @@ test("the KiCad project is deterministic and the board spec uses published footp
   expect(a.spec.parts.length).toBe(parts.length);
   expect(sch.match(/\(symbol \(lib_id /g)!.length).toBe(parts.length);
   for (const p of a.spec.parts) expect(p.footprint).toMatch(/^[A-Za-z0-9_.]+:[A-Za-z0-9_.-]+$/);
-  expect(a.spec.parts.find((p) => p.ref === "U1")!.expect).toBeDefined();
+  /* The antenna keep-out reaches the board edge beside the module's antenna end. */
+  const k = a.spec.keepouts[0]!, u1 = a.spec.parts.find((p) => p.ref === "U1")!;
+  expect(k.maxX).toBe(a.spec.outline.maxX);
+  expect(k.minX).toBeCloseTo(u1.x + 9.5 - 4.4, 6);
   const bytes = zip(a.files);
   expect(new DataView(bytes.buffer).getUint32(0, true)).toBe(0x04034b50);
 });

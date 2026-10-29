@@ -75,3 +75,14 @@ Only label a device supported after recording its exact model/software and testi
 - **The owner's first board** will be this design, ordered after more design iterations. The ESP32 boards on hand stay for firmware experiments only.
 
 See [`hardware-sourcing.md`](hardware-sourcing.md) for the stock check and the open questions.
+
+### Board around the BMD-340, 2026-10-29
+
+- The module runs in high-voltage mode: the LiPo cell feeds VCCH directly and VCC is the module's own 3.0 V output (data sheet §3.3). There is no regulator on the board. USB 5 V reaches the module's VBUS pin and the MCP73831 charger only.
+- Charging is 100 mA (PROG 10 kΩ), gentle for a 250 mAh cell, with a red charge LED.
+- USB-C is a sink: 5.1 kΩ on each CC pin.
+- The IR LED is switched from the cell, not from VCC, because VCC may supply only 25 mA.
+- The battery level is read inside the chip (VDDH ÷ 5), so the board has no divider and spends no pin on it.
+- SWD comes out on a Tag-Connect TC2030 pad, for the one-time bootloader flash.
+- No copper is allowed in the antenna area at the module's end (data sheet figure 12); the antenna sits at the board's right edge in the chin.
+- The chin needs a board at least 58 mm wide, so 1- and 2-column remotes get a wider shell.

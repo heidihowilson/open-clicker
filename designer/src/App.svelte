@@ -14,7 +14,7 @@
   import { CHIPS } from "./lib/chips";
   import { check, errorsIn } from "./lib/checks";
   import { newDesignId, parseDesign, safeParseDesign, type Design, type TemplateId } from "./lib/design";
-  import { keymap, keymapHeader, layoutFile } from "./lib/exports";
+  import { keymap, layoutFile } from "./lib/exports";
   import { planPins } from "./lib/matrix";
   import { keyCapacity } from "./lib/netlist";
   import { DEFAULT_PRICING, tiers, type Tier } from "./lib/pricing";
@@ -106,7 +106,6 @@
       const d = $state.snapshot(design) as Design;
       if (kind === "layout") download(`${slug}.layout.json`, layoutFile(d), "application/json");
       if (kind === "keymap") download(`${slug}.keymap.json`, JSON.stringify(keymap(d), null, 2), "application/json");
-      if (kind === "header") download("keymap.h", keymapHeader(d), "text/x-c");
       design.revision += 1;
       notice = "";
     } catch (e) { notice = e instanceof Error ? e.message : String(e); }

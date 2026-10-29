@@ -68,7 +68,9 @@ export function planPins(design: Design): PinPlan | PinPlanFailure {
   /* IR parts take plain pins before the rows: an IR driver's base resistor would hold a
    * strapping pin at the wrong level during reset, while a diode-isolated row does not. */
   const next = () => { const pin = byPreference(free, (p) => p.wake || p.adc)[0]; if (!pin) throw new Error("pin budget miscounted"); return take(pin); };
-  const irTransmit = design.options.irTransmit ? next() : null;
+  /* The IR carrier is 38 kHz, so the transmitter needs a full-speed pin. */
+  const fast = () => { const pin = free.find((p) => !p.slow); if (!pin) throw new Error("no full-speed pin left for IR"); return take(pin); };
+  const irTransmit = design.options.irTransmit ? fast() : null;
   const irReceive = design.options.irReceive ? next() : null;
   const rows = byPreference(free, (p) => p.wake || p.adc).slice(0, rowCount).map(take);
 

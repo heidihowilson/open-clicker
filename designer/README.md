@@ -18,7 +18,7 @@ Push `main` to the homelab remote to deploy: `git push homelab main`, where `hom
 
 ## What it knows
 
-- **Chips** (`src/lib/chips.ts`): XIAO ESP32-C3, ESP32-C6 and nRF52840 pin maps from the Seeed wiki, with wake, ADC and strapping flags. Current figures carry their source; vendor figures are marked, and our own measurements replace them.
+- **Chip** (`src/lib/chips.ts`): the u-blox BMD-340 pad table and pin budget from its data sheet, with wake, analog and full-speed flags. Current figures carry their source; vendor figures are marked, and our own measurements replace them.
 - **Pin planner** (`src/lib/matrix.ts`): keys form a diode matrix whose columns are wake pins, so any key wakes the chip. Battery sensing takes an analog pin first, IR parts take plain pins next, and strapping pins are used last.
 - **Checks** (`src/lib/checks.ts`): pin budget, keycap overlap (rotated rectangles), profile-switch keys, IR actions without a transmitter, battery fit, and unported firmware.
 
@@ -36,7 +36,7 @@ The tool follows the **Open Clicker** design system in [`docs/brand/`](../docs/b
 
 ## Not yet
 
-PCB (KiCad), switch plate, shell and bill-of-materials export. The XIAO footprint, diode placement and routing need checking against the parts in hand before any of it is offered as a manufacturing file.
+PCB (KiCad), switch plate, shell and bill-of-materials export. The BMD-340 board, diode placement and routing need checking against the parts in hand before any of it is offered as a manufacturing file.
 
 ## KiCad and Gerbers
 

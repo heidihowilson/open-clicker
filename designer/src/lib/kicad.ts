@@ -1,7 +1,8 @@
 import type { Design } from "./design";
-import { boardBounds, partSpots, type Bounds } from "./geometry";
+import { boardBounds, keepouts, partSpots, type Bounds } from "./geometry";
 import { netlist, type Netlist, type Part } from "./netlist";
-import { DIODE, PCB, XIAO_BOARD } from "./parts-data";
+import { CHIPS } from "./chips";
+import { DIODE, PCB } from "./parts-data";
 
 /* KiCad project from a design: the schematic with every part and net, and a board spec that
  * KiCad itself turns into the board (router/board.py), using published footprints only.
@@ -29,22 +30,23 @@ const font = (size = 1.27) => `(effects (font (size ${n(size)} ${n(size)})))`;
 /* ---------- pins and pads, one table per footprint ---------- */
 
 
-/** XIAO pad numbers: 1–7 are D0–D6, 8–11 D7–D10, then 3V3, GND and 5V (Seeed OPL footprint). */
-const XIAO_PAD: Record<string, string> = { D0: "1", D1: "2", D2: "3", D3: "4", D4: "5", D5: "6", D6: "7", D7: "8", D8: "9", D9: "10", D10: "11", "3V3": "12", GND: "13", "5V": "14" };
-const XIAO_NAME = Object.fromEntries(Object.entries(XIAO_PAD).map(([name, pad]) => [pad, name]));
 const PIN_TO_PAD: Record<string, Record<string, string>> = {
   diode: { K: "1", A: "2" },
   led: { K: "1", A: "2" },
   npn: { B: "1", E: "2", C: "3" },
   tsop: { OUT: "1", GND: "2", VS: "3" },
+  charger: { STAT: "1", VSS: "2", VBAT: "3", VDD: "4", PROG: "5" },
 };
 
-type Kind = "xiao" | "switch" | "diode" | "conn" | "r" | "c" | "led" | "npn" | "tsop";
+type Kind = "module" | "usb" | "charger" | "swd" | "battery" | "switch" | "diode" | "r" | "c" | "led" | "npn" | "tsop";
 function kindOf(p: Part): Kind {
-  if (p.ref === "U1") return "xiao";
+  if (p.ref === "U1") return "module";
+  if (p.ref === "U3") return "charger";
+  if (p.ref === "J1") return "usb";
+  if (p.ref === "J2") return "battery";
+  if (p.ref === "J3") return "swd";
   if (p.ref.startsWith("SW")) return "switch";
   if (/^D\d/.test(p.ref)) return "diode";
-  if (p.ref.startsWith("J")) return "conn";
   if (p.ref.startsWith("LED")) return "led";
   if (p.ref.startsWith("Q")) return "npn";
   if (p.ref === "U2") return "tsop";
@@ -56,7 +58,7 @@ function padNets(p: Part): Map<string, string> {
   const kind = kindOf(p);
   const map = new Map<string, string>();
   for (const [pin, net] of Object.entries(p.pins)) {
-    const pad = kind === "xiao" ? XIAO_PAD[pin] : (PIN_TO_PAD[kind]?.[pin] ?? pin);
+    const pad = PIN_TO_PAD[kind]?.[pin] ?? pin;
     if (pad) map.set(pad, net);
   }
   return map;
@@ -89,17 +91,19 @@ export interface SpecPart {
   pads: Record<string, string>;
   /** The schematic symbol's uuid, so KiCad can check the board against the schematic. */
   symbol: string;
-  /** Pads that must land at these board positions; KiCad's own flip and rotation are searched
-   * until they do, rather than assumed. Used for the XIAO, which hangs under the board. */
-  expect?: Record<string, [number, number]>;
 }
+/** A rule area with no copper, tracks or vias on either side, in mm on the board. */
+export interface Keepout { minX: number; minY: number; maxX: number; maxY: number; why: string }
 export interface BoardSpec {
   name: string; revision: number; id: string;
   outline: { minX: number; minY: number; maxX: number; maxY: number; radius: number };
   parts: SpecPart[];
+  keepouts: Keepout[];
 }
 
-const BACK: Kind[] = ["diode", "r", "c", "npn", "conn", "xiao"];
+/* Everything but the switches, the IR receiver and the IR LED sits on the back. */
+const FRONT: Kind[] = ["switch", "tsop"];
+const ORIGIN: Kind[] = ["switch", "module", "usb"];
 
 export function boardSpec(design: Design, list: Netlist = netlist(design)): BoardSpec {
   const bounds = boardBounds(design);
@@ -109,29 +113,24 @@ export function boardSpec(design: Design, list: Netlist = netlist(design)): Boar
     const p = at.get(part.ref) ?? { x: 0, y: 0 };
     const spec: SpecPart = {
       ref: part.ref, value: part.value, footprint: part.footprint, x: p.x, y: p.y,
-      back: BACK.includes(kind), align: kind === "switch" ? "origin" : "pads",
+      back: !FRONT.includes(kind) && part.ref !== "LED1", align: ORIGIN.includes(kind) ? "origin" : "pads",
       pads: Object.fromEntries(padNets(part)), symbol: uuid(`${design.id}/sym/${part.ref}`),
     };
     /* KiCad gives each unused symbol pin its own net, "unconnected-(U1-D9-Pad10)"; the board
      * carries the same names so the schematic parity check compares like with like. */
     for (const pin of SYMBOLS[kind].pins) {
-      if (spec.pads[pin.num] === undefined) spec.pads[pin.num] = `unconnected-(${part.ref}-${pin.name === "~" ? "" : `${pin.name}-`}Pad${pin.num})`;
-    }
-    if (kind === "xiao") {
-      /* The module hangs pads-up under the board with USB-C at the bottom edge: its local
-       * (fx, fy) lands at board (x + fy, y + fx). Pad 1 is at local (7.62, -7.62). */
-      const X = XIAO_BOARD, to = (fx: number, fy: number): [number, number] => [p.x + fy, p.y + fx];
-      spec.expect = { "1": to(X.padRow, -X.padRow), "7": to(-X.padRow, -X.padRow), "14": to(X.padRow, X.padRow) };
+      if (spec.pads[pin.num] === undefined) spec.pads[pin.num] = `unconnected-(${part.ref}-${pin.name === "~" || pin.name === pin.num ? "" : `${pin.name}-`}Pad${pin.num})`;
     }
     return spec;
   });
-  return { name: design.name, revision: design.revision, id: design.id, outline: { ...bounds, radius: PCB.cornerRadius }, parts };
+  return { name: design.name, revision: design.revision, id: design.id, outline: { ...bounds, radius: PCB.cornerRadius }, parts, keepouts: keepouts(design, bounds) };
 }
 
 /* ---------- schematic ---------- */
 
 interface SymPin { num: string; name: string; x: number; y: number; angle: number }
-interface SymDef { id: string; prefix: string; body: string; pins: SymPin[] }
+/** `bom: false` for footprints that are only copper, like the SWD pad. */
+interface SymDef { id: string; prefix: string; body: string; pins: SymPin[]; bom?: boolean }
 
 const stroke = (w = 0.254) => `(stroke (width ${w}) (type default))`;
 const SYMBOLS: Record<Kind, SymDef> = {
@@ -149,17 +148,27 @@ const SYMBOLS: Record<Kind, SymDef> = {
     body: `(circle (center 1.27 0) (radius 2.8194) ${stroke()} (fill (type none))) (polyline (pts (xy 0.635 1.905) (xy 0.635 -1.905)) ${stroke(0.508)} (fill (type none))) (polyline (pts (xy 0.635 0.635) (xy 2.54 2.54)) ${stroke()} (fill (type none))) (polyline (pts (xy 0.635 -0.635) (xy 2.54 -2.54)) ${stroke()} (fill (type none))) (polyline (pts (xy -2.54 0) (xy 0.635 0)) ${stroke()} (fill (type none)))` },
   tsop: { id: "IR_Receiver", prefix: "U", pins: [{ num: "1", name: "OUT", x: -7.62, y: 2.54, angle: 0 }, { num: "2", name: "GND", x: -7.62, y: 0, angle: 0 }, { num: "3", name: "VS", x: -7.62, y: -2.54, angle: 0 }],
     body: `(rectangle (start -5.08 5.08) (end 5.08 -5.08) ${stroke()} (fill (type background)))` },
-  conn: { id: "Conn_2", prefix: "J", pins: [{ num: "1", name: "1", x: -5.08, y: 1.27, angle: 0 }, { num: "2", name: "2", x: -5.08, y: -1.27, angle: 0 }],
-    body: `(rectangle (start -2.54 2.54) (end 1.27 -2.54) ${stroke()} (fill (type background)))` },
-  xiao: { id: "XIAO", prefix: "U", body: `(rectangle (start -7.62 10.16) (end 7.62 -10.16) ${stroke()} (fill (type background)))`,
-    pins: Array.from({ length: 14 }, (_, i) => i < 7
-      ? { num: String(i + 1), name: XIAO_NAME[String(i + 1)]!, x: -10.16, y: 7.62 - i * 2.54, angle: 0 }
-      : { num: String(i + 1), name: XIAO_NAME[String(i + 1)]!, x: 10.16, y: -7.62 + (i - 7) * 2.54, angle: 180 }) },
+  battery: box("Battery_JST_PH", "J", [["1", "+"], ["2", "-"], ["MP", "MP"]]),
+  swd: { ...box("SWD_TC2030", "J", [["1", "VCC"], ["2", "SWDIO"], ["3", "RESET"], ["4", "SWCLK"], ["5", "GND"], ["6", "SWO"]]), bom: false },
+  charger: box("MCP73831", "U", [["1", "STAT"], ["2", "VSS"], ["3", "VBAT"], ["4", "VDD"], ["5", "PROG"]]),
+  usb: box("USB_C_Receptacle", "J", ["A1", "A4", "A5", "A6", "A7", "A8", "A9", "A12", "B1", "B4", "B5", "B6", "B7", "B8", "B9", "B12", "S1"].map((p) => [p, p])),
+  module: box("BMD-340", "U", Object.entries(CHIPS["bmd-340"].pads)),
 };
+
+/** A plain box symbol: pins down the left, then down the right, 2.54 mm apart. */
+function box(id: string, prefix: string, pins: [string, string][]): SymDef {
+  const half = Math.ceil(pins.length / 2), h = half * 2.54 / 2 + 2.54, w = 10.16;
+  return {
+    id, prefix, body: `(rectangle (start -${n(w)} ${n(h)}) (end ${n(w)} -${n(h)}) ${stroke()} (fill (type background)))`,
+    pins: pins.map(([num, name], i) => i < half
+      ? { num, name, x: -w - 2.54, y: h - 2.54 - i * 2.54, angle: 0 }
+      : { num, name, x: w + 2.54, y: h - 2.54 - (i - half) * 2.54, angle: 180 }),
+  };
+}
 
 function libSymbol(s: SymDef): string {
   const pins = s.pins.map((p) => `      (pin passive line (at ${n(p.x)} ${n(p.y)} ${p.angle}) (length 2.54) (name ${q(p.name)} ${font()}) (number ${q(p.num)} ${font()}))`).join("\n");
-  return `    (symbol "OpenClicker:${s.id}" (pin_names (offset 0.762)) (in_bom yes) (on_board yes)
+  return `    (symbol "OpenClicker:${s.id}" (pin_names (offset 0.762)) (in_bom ${s.bom === false ? "no" : "yes"}) (on_board yes)
       (property "Reference" ${q(s.prefix)} (at 0 3.81 0) ${font()})
       (property "Value" ${q(s.id)} (at 0 -3.81 0) ${font()})
       (property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
@@ -180,7 +189,9 @@ export function kicadSchematic(design: Design, list: Netlist = netlist(design), 
   let col = 0, row = 0;
   const keyStart = { x: 76.2, y: 38.1 };
   const others: Record<string, { x: number; y: number }> = {
-    U1: { x: 38.1, y: 50.8 }, J1: { x: 38.1, y: 88.9 }, J2: { x: 38.1, y: 101.6 }, R3: { x: 25.4, y: 127 }, R4: { x: 38.1, y: 127 },
+    U1: { x: 38.1, y: 152.4 }, J1: { x: 152.4, y: 165.1 }, R5: { x: 190.5, y: 165.1 }, R6: { x: 203.2, y: 165.1 },
+    U3: { x: 241.3, y: 165.1 }, R7: { x: 279.4, y: 165.1 }, C2: { x: 292.1, y: 165.1 }, C3: { x: 304.8, y: 165.1 },
+    R8: { x: 330.2, y: 165.1 }, LED2: { x: 355.6, y: 165.1 }, J2: { x: 152.4, y: 203.2 }, J3: { x: 203.2, y: 203.2 },
     LED1: { x: 76.2, y: 228.6 }, Q1: { x: 101.6, y: 228.6 }, R1: { x: 63.5, y: 228.6 }, R2: { x: 88.9, y: 241.3 }, U2: { x: 139.7, y: 228.6 }, C1: { x: 165.1, y: 228.6 },
   };
   for (const part of list.parts) {
@@ -193,7 +204,7 @@ export function kicadSchematic(design: Design, list: Netlist = netlist(design), 
     at = { x: g(at.x), y: g(at.y) };
     const id = uuid(`${design.id}/sym/${part.ref}`);
     const nets = padNets(part);
-    out.push(`  (symbol (lib_id "OpenClicker:${sym.id}") (at ${n(at.x)} ${n(at.y)} 0) (unit 1) (in_bom yes) (on_board yes) (dnp no) (uuid ${id})
+    out.push(`  (symbol (lib_id "OpenClicker:${sym.id}") (at ${n(at.x)} ${n(at.y)} 0) (unit 1) (in_bom ${sym.bom === false ? "no" : "yes"}) (on_board yes) (dnp no) (uuid ${id})
     (property "Reference" ${q(part.ref)} (at ${n(at.x)} ${n(at.y - 3.81)} 0) ${font()})
     (property "Value" ${q(part.value)} (at ${n(at.x)} ${n(at.y + 3.81)} 0) ${font()})
     (property "Footprint" ${q(part.footprint)} (at ${n(at.x)} ${n(at.y)} 0) (effects (font (size 1.27 1.27)) hide))
@@ -233,8 +244,8 @@ export function kicadProject(design: Design): KicadProject {
     files: {
       [`${slug}/${slug}.kicad_pro`]: pro,
       [`${slug}/${slug}.kicad_sch`]: kicadSchematic(design, list, slug),
-      /* The two footprints KiCad does not ship travel with the project. */
-      [`${slug}/fp-lib-table`]: `(fp_lib_table\n  (version 7)\n  (lib (name "OpenClicker")(type "KiCad")(uri "\${KIPRJMOD}/OpenClicker.pretty")(options "")(descr "Open Clicker: XIAO and Choc hot-swap footprints"))\n)\n`,
+      /* The footprints KiCad does not ship travel with the project. */
+      [`${slug}/fp-lib-table`]: `(fp_lib_table\n  (version 7)\n  (lib (name "OpenClicker")(type "KiCad")(uri "\${KIPRJMOD}/OpenClicker.pretty")(options "")(descr "Open Clicker: BMD-340 and Choc hot-swap footprints"))\n)\n`,
     },
   };
 }

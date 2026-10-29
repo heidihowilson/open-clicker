@@ -85,9 +85,13 @@ export type Design = z.infer<typeof DesignSchema>;
 export const newDesignId = () => crypto.randomUUID();
 
 /* Schema 2 files (before 2026-10-26) lack the id, revision and circuit block, and name the
- * template freely. Upgrade them on load; everything else is unchanged. */
+ * template freely. Files from before 2026-10-29 name a XIAO controller; every board now uses
+ * the BMD-340 (docs/decisions.md). Upgrade both on load; everything else is unchanged. */
 function upgrade(input: unknown): unknown {
-  if (typeof input !== "object" || input === null || (input as { schema?: unknown }).schema !== 2) return input;
+  if (typeof input !== "object" || input === null) return input;
+  const chip = (input as { chip?: unknown }).chip;
+  if (typeof chip === "string" && chip.startsWith("xiao-")) input = { ...input, chip: "bmd-340" };
+  if ((input as { schema?: unknown }).schema !== 2) return input;
   const old = input as Record<string, unknown>;
   const template = String(old.template ?? "").toLowerCase();
   return {

@@ -4,7 +4,7 @@
   "revision": 0,
   "name": "Living room Tile",
   "template": "tile",
-  "chip": "xiao-esp32c6",
+  "chip": "bmd-340",
   "keycap": "choc-mcc",
   "options": {
     "irTransmit": false,

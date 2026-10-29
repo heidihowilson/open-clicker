@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  export type ExportKind = "layout" | "keymap" | "header";
+  export type ExportKind = "layout" | "keymap";
 </script>
 
 <script lang="ts">
@@ -104,7 +104,6 @@
     {#if blocked}<p class="small alert">{blocked}</p>{/if}
     <div class="exports">
       <button class="oc-btn" disabled={!!blocked} onclick={() => onExport("keymap")}>Keymap</button>
-      <button class="oc-btn" disabled={!!blocked || chip.firmware !== "esp-idf"} title={chip.firmware !== "esp-idf" ? "No firmware for this controller yet." : ""} onclick={() => onExport("header")}>keymap.h</button>
       <button class="oc-btn" onclick={() => onExport("layout")}>Layout file</button>
       <label class="oc-btn">Open a layout<input type="file" accept="application/json,.json" onchange={onImport} hidden /></label>
     </div>

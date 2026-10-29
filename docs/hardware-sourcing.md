@@ -50,4 +50,9 @@ Diodes (1N4148W), resistors, the IR LED driver, the USB-C connector and the batt
 - **Firmware:** the current firmware is ESP-IDF on the ESP32-C6. The nRF52840 needs new firmware (Zephyr, possibly ZMK for keys) with our IR and profile features added.
 - **Updates:** over Bluetooth through a companion app (later), or Web Bluetooth from the website (Chrome only, not Safari on iPhone).
 - **Models:** the BMD-340 footprint and 3D model are in the repo, checked against the data sheet; see [`hardware-models.md`](hardware-models.md).
-- **Designer:** the board generator, 3D parts and bill of materials still model the XIAO ESP32-C6, so they must move to the BMD-340.
+- **Designer:** done 2026-10-29. The board generator, 3D view and bill of materials use the BMD-340, USB-C, MCP73831 charger and a TC2030 SWD pad. The 3D view still draws data-sheet boxes for the chin parts; swapping in the GLB models is next.
+- **Bootloader:** a bare BMD-340 has no bootloader. Each board needs one SWD flash (TC2030 pad, about a $10 probe) before USB updates work. JLCPCB does not program parts.
+- **Module revision:** order BMD-340-A-R-**01** or newer. The -00 uses nRF52840 rev 1 silicon, and its VCCH (high-voltage) mode is unreliable (data sheet §3.3). The JLCPCB listing C5456944 does not say which revision it stocks; ask before ordering.
+- **Inner ground pads:** the BMD-340 has 13 ground pads; the two on its inner ring (18 and 55) are left unwired for now. The module joins its grounds inside, and the other 11 are wired. u-blox's fan-out example reaches the inner pads with vias to a ground plane. Add a ground fill to the board pipeline and wire them before the first order.
+- **Routing:** keys and IR use only pads on the module's two outer rings, so a 2-layer board can reach them. The router gets 300 s per board.
+- **Battery polarity:** JST-PH cells are not consistent about which pin is positive. Check the cell against J2 pin 1 (+) before plugging it in.

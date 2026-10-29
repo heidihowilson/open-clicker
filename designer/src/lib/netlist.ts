@@ -1,4 +1,4 @@
-import { CHIPS, type Pin } from "./chips";
+import { BMD340_INNER_GND, CHIPS, padOf, type Pin } from "./chips";
 import { readingOrder, type Design } from "./design";
 import { planPins, type PinPlan } from "./matrix";
 
@@ -24,13 +24,16 @@ export interface Netlist {
 /* Footprint library ids. All come from published libraries; router/footprints/README.md says
  * which. The board is built from them by KiCad itself on the router (router/board.py). */
 export const FOOTPRINTS = {
-  xiao: "OpenClicker:XIAO-ESP32-C6-DIP",
+  module: "OpenClicker:u-blox_BMD-340",
+  usb: "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12",
+  charger: "Package_TO_SOT_SMD:SOT-23-5",
+  swd: "Connector:Tag-Connect_TC2030-IDC-NL_2x03_P1.27mm_Vertical",
   switch: "OpenClicker:SW_Hotswap_Kailh_Choc_V1",
   diode: "Diode_SMD:D_SOD-123",
-  battery: "Connector_JST:JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical",
-  batteryLink: "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+  battery: "Connector_JST:JST_PH_S2B-PH-SM4-TB_1x02-1MP_P2.00mm_Horizontal",
   r0805: "Resistor_SMD:R_0805_2012Metric",
   c0805: "Capacitor_SMD:C_0805_2012Metric",
+  led0805: "LED_SMD:LED_0805_2012Metric",
   irLed: "LED_THT:LED_D3.0mm",
   sot23: "Package_TO_SOT_SMD:SOT-23",
   irReceiver: "OptoDevice:Vishay_MOLD-3Pin",
@@ -57,15 +60,25 @@ export function netlist(design: Design): Netlist {
   const refs = designators(design, plan);
   const parts: Part[] = [];
 
-  /* The controller: every used pin on its net, the rest unconnected. */
-  const xiao: Record<string, string> = { "3V3": "3V3", GND: "GND" };
-  const on = (pin: Pin | null, net: string) => { if (pin) xiao[pin.id] = net; };
+  /* The module runs in high-voltage mode (data sheet §3.3): the cell feeds VCCH directly and
+   * VCC is the module's own 3.0 V output, the logic level for everything on its pins. USB 5 V
+   * reaches only VBUS, the USB PHY's supply. Module pads are numbered, so pins go by pad. */
+  const u1: Record<string, string> = {};
+  for (const [pad, name] of Object.entries(chip.pads)) if (name === "GND" && !BMD340_INNER_GND.includes(pad)) u1[pad] = "GND";
+  u1[padOf(chip, "VCC")] = "VCC";
+  u1[padOf(chip, "VCCH")] = "VBAT";
+  u1[padOf(chip, "VBUS")] = "VBUS";
+  u1[padOf(chip, "USB-D-")] = "USB_DN";
+  u1[padOf(chip, "USB-D+")] = "USB_DP";
+  u1[padOf(chip, "SWDIO")] = "SWDIO";
+  u1[padOf(chip, "SWCLK")] = "SWCLK";
+  u1[padOf(chip, "P0.18")] = "RESET";
+  const on = (pin: Pin | null, net: string) => { if (pin) u1[padOf(chip, pin.id)] = net; };
   plan.columns.forEach((p, i) => on(p, `COL${i}`));
   plan.rows.forEach((p, i) => on(p, `ROW${i}`));
   on(plan.irTransmit, "IR_TX");
   on(plan.irReceive, "IR_RX");
-  on(plan.battery, "VBAT_SENSE");
-  parts.push({ ref: "U1", value: chip.label, footprint: FOOTPRINTS.xiao, pins: xiao });
+  parts.push({ ref: "U1", value: "BMD-340-A-R-01", footprint: FOOTPRINTS.module, pins: u1 });
 
   /* Column to row: the switch joins its column to a node, the diode's cathode goes to the row. */
   for (const k of readingOrder(design.keys)) {
@@ -75,14 +88,38 @@ export function netlist(design: Design): Netlist {
     parts.push({ ref: r.d, value: "1N4148W", footprint: FOOTPRINTS.diode, pins: { A: node, K: `ROW${r.row}` }, keyId: k.id });
   }
 
-  /* The cell plugs into J1; two short wires from J2 reach the BAT pads under the XIAO. */
-  parts.push({ ref: "J1", value: "Battery, JST-PH 2-pin", footprint: FOOTPRINTS.battery, pins: { "1": "VBAT", "2": "GND" } });
-  parts.push({ ref: "J2", value: "Wire to XIAO BAT pads", footprint: FOOTPRINTS.batteryLink, pins: { "1": "VBAT", "2": "GND" } });
+  /* USB-C as a sink: 5.1k on each CC pin asks the host for 5 V. Pads go by the connector's
+   * own names; both plug orientations are tied together, and the shield goes to ground. */
+  parts.push(
+    { ref: "J1", value: "USB-C, HRO TYPE-C-31-M-12", footprint: FOOTPRINTS.usb, pins: {
+      A4: "VBUS", A9: "VBUS", B4: "VBUS", B9: "VBUS", A1: "GND", A12: "GND", B1: "GND", B12: "GND", A5: "CC1", B5: "CC2",
+      A6: "USB_DP", B6: "USB_DP", A7: "USB_DN", B7: "USB_DN", S1: "GND" } },
+    { ref: "R5", value: "5.1k", footprint: FOOTPRINTS.r0805, pins: { "1": "CC1", "2": "GND" } },
+    { ref: "R6", value: "5.1k", footprint: FOOTPRINTS.r0805, pins: { "1": "CC2", "2": "GND" } },
+  );
+
+  /* Charging: MCP73831 from USB 5 V into the cell. PROG 10k sets 100 mA, gentle for a
+   * 250 mAh cell. STAT pulls low while charging and lights LED2. */
+  parts.push(
+    { ref: "U3", value: "MCP73831T-2ACI/OT", footprint: FOOTPRINTS.charger, pins: { STAT: "CHG_STAT", VSS: "GND", VBAT: "VBAT", VDD: "VBUS", PROG: "CHG_PROG" } },
+    { ref: "R7", value: "10k", footprint: FOOTPRINTS.r0805, pins: { "1": "CHG_PROG", "2": "GND" } },
+    { ref: "C2", value: "4.7u", footprint: FOOTPRINTS.c0805, pins: { "1": "VBUS", "2": "GND" } },
+    { ref: "C3", value: "4.7u", footprint: FOOTPRINTS.c0805, pins: { "1": "VBAT", "2": "GND" } },
+    { ref: "R8", value: "1k", footprint: FOOTPRINTS.r0805, pins: { "1": "VBUS", "2": "CHG_LED" } },
+    { ref: "LED2", value: "Charging, red", footprint: FOOTPRINTS.led0805, pins: { A: "CHG_LED", K: "CHG_STAT" } },
+  );
+
+  /* The cell plugs into J2. Check its lead polarity against pin 1 before plugging it in. */
+  parts.push({ ref: "J2", value: "Battery, JST-PH 2-pin", footprint: FOOTPRINTS.battery, pins: { "1": "VBAT", "2": "GND" } });
+
+  /* SWD for the one-time bootloader flash: a Tag-Connect TC2030 pad, no connector to fit. */
+  parts.push({ ref: "J3", value: "SWD, Tag-Connect TC2030", footprint: FOOTPRINTS.swd, pins: { "1": "VCC", "2": "SWDIO", "3": "RESET", "4": "SWCLK", "5": "GND" } });
 
   if (design.options.irTransmit) {
-    /* A low-side NPN switch drives the LED from 3V3; R1 sets about 100 mA pulses. */
+    /* A low-side NPN switches the LED straight from the cell, so its ~100 mA pulses never load
+     * the module's 25 mA VCC output; R1 sets the current. */
     parts.push(
-      { ref: "R1", value: "22R", footprint: FOOTPRINTS.r0805, pins: { "1": "3V3", "2": "IR_A" } },
+      { ref: "R1", value: "22R", footprint: FOOTPRINTS.r0805, pins: { "1": "VBAT", "2": "IR_A" } },
       { ref: "LED1", value: "IR LED 940 nm", footprint: FOOTPRINTS.irLed, pins: { A: "IR_A", K: "IR_K" } },
       { ref: "Q1", value: "MMBT2222A", footprint: FOOTPRINTS.sot23, pins: { B: "IR_B", C: "IR_K", E: "GND" } },
       { ref: "R2", value: "1k", footprint: FOOTPRINTS.r0805, pins: { "1": "IR_TX", "2": "IR_B" } },
@@ -90,15 +127,8 @@ export function netlist(design: Design): Netlist {
   }
   if (design.options.irReceive) {
     parts.push(
-      { ref: "U2", value: "TSOP38238", footprint: FOOTPRINTS.irReceiver, pins: { OUT: "IR_RX", GND: "GND", VS: "3V3" } },
-      { ref: "C1", value: "100n", footprint: FOOTPRINTS.c0805, pins: { "1": "3V3", "2": "GND" } },
-    );
-  }
-  if (plan.battery) {
-    /* Halve the cell voltage into an analog pin: 4.2 V reads as 2.1 V. */
-    parts.push(
-      { ref: "R3", value: "220k", footprint: FOOTPRINTS.r0805, pins: { "1": "VBAT", "2": "VBAT_SENSE" } },
-      { ref: "R4", value: "220k", footprint: FOOTPRINTS.r0805, pins: { "1": "VBAT_SENSE", "2": "GND" } },
+      { ref: "U2", value: "TSOP38238", footprint: FOOTPRINTS.irReceiver, pins: { OUT: "IR_RX", GND: "GND", VS: "VCC" } },
+      { ref: "C1", value: "100n", footprint: FOOTPRINTS.c0805, pins: { "1": "VCC", "2": "GND" } },
     );
   }
 

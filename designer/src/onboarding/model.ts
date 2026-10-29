@@ -20,8 +20,8 @@ export const CAPS: Record<CapColor, { base: string; top: string }> = {
 };
 export const SHELL_COLOR = "#161618";
 
-/* The XIAO ESP32-C6 with IR scans a 7 × 3 matrix: 21 keys. Battery-level reporting would
- * take a pin and drop that to 14, so it is off in this version. */
+/* 21 keys for now: the BMD-340 has pins for many more, but the shell and templates are sized
+ * for the original 7 × 3 brick. The module reads its own battery level, so no pin is spent on it. */
 export const MAX_KEYS = 21;
 export const MAX_COLS = 5;
 export const MAX_ROWS = 12;
@@ -91,7 +91,7 @@ export function toDesign(r: Remote, name = "My Open Clicker"): Design {
   const keys = live(r);
   return {
     schema: 3, id: "onboarding-remote", revision: 0, name, template: "custom",
-    chip: "xiao-esp32c6", keycap: "choc-mbk",
+    chip: "bmd-340", keycap: "choc-mbk",
     options: { irTransmit: true, irReceive: false, batterySense: false },
     battery: { capacityMah: 250, lengthMm: 30, widthMm: 20, thicknessMm: 5 },
     circuit: { ...CIRCUIT },

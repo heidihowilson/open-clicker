@@ -9,6 +9,7 @@ import { PCB, SHELL } from "./parts-data";
 
 export type BomId =
   | "controller" | "switch" | "keycap" | "diode" | "battery" | "pcb"
+  | "usb" | "charger" | "battery-connector" | "capacitor" | "status-led"
   | "ir-led" | "ir-receiver" | "ir-driver" | "resistor" | "shell" | "plate" | "lid";
 
 export interface BomLine {
@@ -48,7 +49,12 @@ export function bom(design: Design): BomLine[] {
   const keys = design.keys.length;
   const b = boardBounds(design);
   const lines: BomLine[] = [
-    { id: "controller", label: chip.label, spec: "Controller module, castellated", qty: 1, unitUsd: chip.priceUsd, basis: "Seeed list price, one unit", kind: "buy" },
+    { id: "controller", label: chip.label, spec: "nRF52840 module, -01 revision or newer; factory-placed", qty: 1, unitUsd: chip.priceUsd, basis: "JLCPCB C5456944, one unit", kind: "buy" },
+    { id: "usb", label: "USB-C receptacle", spec: "HRO TYPE-C-31-M-12, 16-pin", qty: 1, unitUsd: 0.19, basis: "JLCPCB C165948", kind: "buy" },
+    { id: "charger", label: "Charger IC", spec: "MCP73831, SOT-23-5, 100 mA", qty: 1, unitUsd: 0.7, basis: "JLCPCB C424093", kind: "buy" },
+    { id: "battery-connector", label: "Battery connector", spec: "JST-PH 2-pin, SMD right angle", qty: 1, unitUsd: 0.05, basis: "JLCPCB C54582899", kind: "buy" },
+    { id: "capacitor", label: "Capacitor", spec: "4.7 µF 0805; charger in and out", qty: 2, unitUsd: 0.01, basis: "LCSC basic part", kind: "buy" },
+    { id: "status-led", label: "Charging LED", spec: "Red 0805", qty: 1, unitUsd: 0.01, basis: "LCSC basic part", kind: "buy" },
     { id: "switch", label: "Kailh Choc V1", spec: "Low-profile switch, PG1350", qty: keys, unitUsd: 0.55, basis: "About $5.50 per 10", kind: "buy" },
     design.keycap === "choc-mbk"
       ? { id: "keycap", label: "MBK keycap 1u", spec: "17.5 × 16.5 mm, Choc stem", qty: keys, unitUsd: 0.9, basis: "About $9 per 10 (SplitKB)", kind: "buy" }
@@ -59,16 +65,16 @@ export function bom(design: Design): BomLine[] {
     { id: "pcb", label: "Main PCB", spec: `FR-4 ${PCB.thickness} mm · ${(b.maxX - b.minX).toFixed(1)} × ${(b.maxY - b.minY).toFixed(1)} mm`, qty: 1, unitUsd: 2,
       basis: "JLCPCB 5-board prototype run, per board, before shipping", kind: "fabricate" },
   ];
-  let resistors = 0;
+  /* USB CC pull-downs, charge-current set and LED resistor. */
+  let resistors = 4;
   if (design.options.irTransmit) {
     lines.push({ id: "ir-led", label: "IR LED", spec: "940 nm, 3 mm", qty: 1, unitUsd: 0.15, basis: "Distributor, single unit", kind: "buy" });
     lines.push({ id: "ir-driver", label: "IR driver transistor", spec: "MMBT2222A, SOT-23", qty: 1, unitUsd: 0.05, basis: "Distributor, qty 10", kind: "buy" });
     resistors += 2;
   }
   if (design.options.irReceive) lines.push({ id: "ir-receiver", label: "IR receiver", spec: "38 kHz, TSOP38238 class", qty: 1, unitUsd: 1.2, basis: "Distributor, single unit", kind: "buy" });
-  if (design.options.batterySense && !chip.batteryDividerBuiltIn) resistors += 2;
-  const jobs = [design.options.irTransmit && "IR current limit", design.options.batterySense && !chip.batteryDividerBuiltIn && "battery divider"].filter(Boolean).join(" and ");
-  if (resistors) lines.push({ id: "resistor", label: "Resistor", spec: `0805; ${jobs}`, qty: resistors, unitUsd: 0.01, basis: "Distributor, qty 100", kind: "buy" });
+  const jobs = ["USB, charger", design.options.irTransmit && "IR current limit"].filter(Boolean).join(" and ");
+  lines.push({ id: "resistor", label: "Resistor", spec: `0805; ${jobs}`, qty: resistors, unitUsd: 0.01, basis: "Distributor, qty 100", kind: "buy" });
   const grams = shellGrams(design);
   const printed = (id: "shell" | "plate" | "lid", label: string, grams: number): BomLine =>
     ({ id, label, spec: `Printed in ${design.finish ?? "butter"} PLA or PETG, about ${grams.toFixed(0)} g`, qty: 1, unitUsd: Math.round(grams * FILAMENT_USD_PER_G * 100) / 100, basis: "Filament at $25/kg", kind: "print" });
