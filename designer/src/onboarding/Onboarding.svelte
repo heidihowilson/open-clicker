@@ -332,17 +332,32 @@
    * loaded only when asked for. */
   let modelling = $state(false);
   let hand = $state.raw<HandModel | null>(null);
+  async function manifold() {
+    const [{ default: Module }, { default: wasmUrl }] = await Promise.all([import("manifold-3d"), import("manifold-3d/manifold.wasm?url")]);
+    const wasm = await Module({ locateFile: () => wasmUrl });
+    wasm.setup();
+    return wasm;
+  }
   async function printModel() {
     failure = ""; modelling = true;
     try {
-      const [{ default: Module }, { default: wasmUrl }, { handModel }] = await Promise.all([
-        import("manifold-3d"), import("manifold-3d/manifold.wasm?url"), import("./handmodel"),
-      ]);
-      const wasm = await Module({ locateFile: () => wasmUrl });
-      wasm.setup();
+      const [wasm, { handModel }] = await Promise.all([manifold(), import("./handmodel")]);
       hand = handModel(wasm, remote);
     } catch { failure = "The model did not build. Try again."; }
     finally { modelling = false; }
+  }
+  /* The real two-piece shell, ready to print, with the print and assembly notes. */
+  let shelling = $state(false);
+  async function printShell() {
+    failure = ""; shelling = true;
+    try {
+      const [wasm, { enclosure, enclosureStl, PRINT_NOTES }, { zip }] = await Promise.all([manifold(), import("../lib/enclosure"), import("../lib/zip")]);
+      const stl = enclosureStl(enclosure(wasm, toDesign(remote)));
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([zip({ "shell-top.stl": stl.top, "shell-bottom.stl": stl.bottom, "PRINT.txt": PRINT_NOTES })], { type: "application/zip" }));
+      a.download = "open-clicker-shell.zip"; a.click(); URL.revokeObjectURL(a.href);
+    } catch { failure = "The shell did not build. Try again."; }
+    finally { shelling = false; }
   }
   async function getFiles() {
     failure = ""; busy = "Sending your design…";
@@ -521,7 +536,10 @@
         </form>
       {/if}
       {#if failure}<p class="note err">{failure}</p>{/if}
-      <button type="button" class="link rise d2" disabled={modelling} onclick={printModel}>{modelling ? "Building the model…" : "Print a mockup"}</button>
+      <div class="rise d2 row">
+        <button type="button" class="link" disabled={modelling} onclick={printModel}>{modelling ? "Building the model…" : "Print a mockup"}</button>
+        <button type="button" class="link" disabled={shelling} onclick={printShell}>{shelling ? "Building the shell…" : "Print the shell"}</button>
+      </div>
       <button type="button" class="link rise d2" onclick={back}>Back</button>
     {/if}
 

@@ -155,7 +155,7 @@ export class RemoteScene {
     /* The face has a hole per key; the plate and lid under it keep the holes dark from above. */
     const parts = buildShell({ ...d, keys: d.keys.filter((k) => shown.has(k.id)) }, b, this.look(this.remote));
     const shell = new THREE.Group();
-    shell.add(parts.lid, parts.plate, parts.shell);
+    shell.add(parts.lid, parts.shell);
     applyStyle(shell, "#000");
     shell.add(this.shadow(b));
     if (this.body) { this.edit.remove(this.body); this.dispose3d(this.body); }

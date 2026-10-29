@@ -1,6 +1,6 @@
 import { CHIPS } from "./chips";
 import type { Design } from "./design";
-import { boardBounds, SHELL_RULES } from "./geometry";
+import { boardBounds, SHELL_RULES, stack } from "./geometry";
 import { PCB, SHELL } from "./parts-data";
 
 /* Bill of materials: one line per thing you buy or print. These are the units the exploded
@@ -10,7 +10,7 @@ import { PCB, SHELL } from "./parts-data";
 export type BomId =
   | "controller" | "switch" | "keycap" | "diode" | "battery" | "pcb"
   | "usb" | "charger" | "battery-connector" | "capacitor" | "status-led"
-  | "ir-led" | "ir-receiver" | "ir-driver" | "resistor" | "shell" | "plate" | "lid";
+  | "ir-led" | "ir-receiver" | "ir-driver" | "resistor" | "screws" | "shell" | "lid";
 
 export interface BomLine {
   id: BomId;
@@ -28,19 +28,19 @@ const PLA_G_PER_CM3 = 1.24;
 function roundedArea(w: number, h: number, r: number) { return w * h - (4 - Math.PI) * r * r; }
 function perimeter(w: number, h: number, r: number) { return 2 * (w + h) - (8 - 2 * Math.PI) * r; }
 
-/* Printed mass of the three shell parts, from their outlines. */
-export function shellGrams(design: Design): { shell: number; plate: number; lid: number } {
-  const b = boardBounds(design);
+/* Printed mass of the two shell pieces, from their outlines (lib/enclosure.ts has the exact
+ * solids): the top piece is solid between the board and the face except for the switch holes
+ * and keycap pockets; the bottom piece is a floor and walls. */
+export function shellGrams(design: Design): { shell: number; lid: number } {
+  const b = boardBounds(design), h = stack(design);
   const grow = SHELL_RULES.wall + SHELL.clearance, r = SHELL_RULES.fillet;
-  const w = b.maxX - b.minX + 2 * grow, h = b.maxY - b.minY + 2 * grow;
-  const depth = PCB.thickness + Math.max(5.7, 1.5 + design.battery.thicknessMm) + 1;
-  const capHoles = design.keys.reduce((sum, k) => sum + (18 * k.w + 0.5) * 17.5, 0);
-  const plateHoles = design.keys.length * SHELL_RULES.plateCutout ** 2;
+  const w = b.maxX - b.minX + 2 * grow, d = b.maxY - b.minY + 2 * grow, area = roundedArea(w, d, r);
+  const pockets = design.keys.reduce((sum, k) => sum + (18 * k.w + 0.5) * 17.5, 0);
+  const holes = design.keys.length * SHELL_RULES.plateCutout ** 2;
   const g = (mm3: number) => (mm3 / 1000) * PLA_G_PER_CM3;
   return {
-    shell: g((roundedArea(w, h, r) - capHoles) * SHELL.bezel + perimeter(w, h, r) * SHELL_RULES.wall * (PCB.thickness + 3.6)),
-    plate: g((roundedArea(w - 2 * grow, h - 2 * grow, r - grow) - plateHoles) * SHELL_RULES.plate),
-    lid: g(roundedArea(w, h, r) * SHELL.floor + perimeter(w, h, r) * SHELL_RULES.wall * depth),
+    shell: g((area - holes) * h.plateTop + (area - pockets) * (h.face - h.plateTop)),
+    lid: g(area * SHELL.floor + perimeter(w, d, r) * SHELL_RULES.wall * (h.split - h.floorTop)),
   };
 }
 
@@ -76,9 +76,10 @@ export function bom(design: Design): BomLine[] {
   const jobs = ["USB, charger", design.options.irTransmit && "IR current limit"].filter(Boolean).join(" and ");
   lines.push({ id: "resistor", label: "Resistor", spec: `0805; ${jobs}`, qty: resistors, unitUsd: 0.01, basis: "Distributor, qty 100", kind: "buy" });
   const grams = shellGrams(design);
-  const printed = (id: "shell" | "plate" | "lid", label: string, grams: number): BomLine =>
+  lines.push({ id: "screws", label: "Screws", spec: "M2 × 12 mm pan head, thread-forming into plastic", qty: 4, unitUsd: 0.05, basis: "About $5 per 100", kind: "buy" });
+  const printed = (id: "shell" | "lid", label: string, grams: number): BomLine =>
     ({ id, label, spec: `Printed in ${design.finish ?? "butter"} PLA or PETG, about ${grams.toFixed(0)} g`, qty: 1, unitUsd: Math.round(grams * FILAMENT_USD_PER_G * 100) / 100, basis: "Filament at $25/kg", kind: "print" });
-  lines.push(printed("shell", "The shell", grams.shell), printed("plate", "The plate", grams.plate), printed("lid", "The lid", grams.lid));
+  lines.push(printed("shell", "The shell", grams.shell), printed("lid", "The lid", grams.lid));
   return lines;
 }
 

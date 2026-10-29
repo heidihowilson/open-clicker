@@ -79,9 +79,9 @@ function labor(minutes: number, label: string, a: PricingAssumptions): PriceLine
 
 export function shellPrint(design: Design): PriceLine[] {
   const g = shellGrams(design);
-  const grams = g.shell + g.plate + g.lid;
+  const grams = g.shell + g.lid;
   return [
-    { label: "Shell, plate and lid filament", qty: 1, unitUsd: round(grams * FILAMENT_USD_PER_G), basis: `About ${grams.toFixed(0)} g at $25/kg` },
+    { label: "Shell filament, both pieces", qty: 1, unitUsd: round(grams * FILAMENT_USD_PER_G), basis: `About ${grams.toFixed(0)} g at $25/kg` },
     { label: "Printer time", qty: 1, unitUsd: round((grams / PRINT_G_PER_HOUR) * PRINTER_USD_PER_HOUR), basis: `About ${(grams / PRINT_G_PER_HOUR).toFixed(1)} h at $${PRINTER_USD_PER_HOUR}/h` },
   ];
 }

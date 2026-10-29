@@ -39,6 +39,7 @@ export const FOOTPRINTS = {
   irLed: "LED_THT:LED_D3.0mm",
   sot23: "Package_TO_SOT_SMD:SOT-23",
   irReceiver: "OptoDevice:Vishay_MOLD-3Pin",
+  hole: "MountingHole:MountingHole_2.2mm_M2",
 } as const;
 
 export interface Designators {
@@ -116,6 +117,9 @@ export function netlist(design: Design): Netlist {
 
   /* SWD for the one-time bootloader flash: a Tag-Connect TC2030 pad, no connector to fit. */
   parts.push({ ref: "J3", value: "SWD, Tag-Connect TC2030", footprint: FOOTPRINTS.swd, pins: { "1": "VCC", "2": "SWDIO", "3": "RESET", "4": "SWCLK", "5": "GND" } });
+
+  /* Four M2 holes for the screws that hold the shell together (geometry.ts mountingHoles). */
+  for (let i = 1; i <= 4; i++) parts.push({ ref: `H${i}`, value: "M2 mounting hole", footprint: FOOTPRINTS.hole, pins: {} });
 
   if (design.options.irTransmit) {
     /* A low-side NPN switches the LED straight from the cell, so its ~100 mA pulses never load

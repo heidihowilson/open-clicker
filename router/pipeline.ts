@@ -7,6 +7,7 @@ import type { Design } from "../designer/src/lib/design";
 import { netlist as netlistOf } from "../designer/src/lib/netlist";
 import { kicadProject } from "../designer/src/lib/kicad";
 import { jlcBom, jlcCpl } from "./jlc";
+import { enclosure, enclosureStl, loadManifold, PRINT_NOTES } from "../designer/src/lib/enclosure";
 import { zip } from "../designer/src/lib/zip";
 
 const ROUTER = process.env.FREEROUTING ?? "/opt/freerouting/bin/freerouting";
@@ -90,6 +91,12 @@ export async function buildBoard(design: Design): Promise<{ zip: Uint8Array<Arra
     files[`${project.name}/${project.name}-bom.csv`] = jlcBom(list);
     files[`${project.name}/${project.name}-cpl.csv`] = jlcCpl(list, await readFile(pos, "utf8"));
     files[`${project.name}/ORDER.txt`] = order(design, project.name, report);
+    /* The printable shell, from the same geometry the board was placed with. */
+    const wasm = await loadManifold();
+    const shell = enclosureStl(enclosure(wasm, design));
+    files[`${project.name}/shell/shell-top.stl`] = shell.top;
+    files[`${project.name}/shell/shell-bottom.stl`] = shell.bottom;
+    files[`${project.name}/shell/PRINT.txt`] = PRINT_NOTES;
     return { zip: zip(files), report, name: `${project.name}-routed.zip` };
   } finally {
     await rm(dir, { recursive: true, force: true });

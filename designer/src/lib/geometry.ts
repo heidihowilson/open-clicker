@@ -1,11 +1,36 @@
 import { capWidth, KEYCAPS, type Design, type Key } from "./design";
+import { DIODE, PCB, SHELL } from "./parts-data";
 
 export interface Point { x: number; y: number }
 export interface Bounds { minX: number; minY: number; maxX: number; maxY: number }
 
 /* Shell rules from the Open Clicker brand book (Hardware): the outline is the key field's
  * bounding box plus a 6 mm margin on the sides and top and a 20 mm chin at the bottom. */
-export const SHELL_RULES = { margin: 6, chin: 20, fillet: 8, wall: 2, wallMin: 1.6, plate: 1.5, plateCutout: 14 } as const;
+/* The plate is part of the top shell. Choc V1 switches clip into a 1.2 mm plate (Kailh
+ * CPG1350 drawing) through a 14 mm square hole. */
+export const SHELL_RULES = { margin: 6, chin: 20, fillet: 8, wall: 2, wallMin: 1.6, plate: 1.2, plateCutout: 14 } as const;
+
+/** Heights in mm, with 0 at the top of the circuit board. The shell splits there: the top piece
+ * holds the plate and face, the bottom piece holds the board, the battery and the screws. */
+export function stack(design: Design) {
+  const depth = PCB.thickness + Math.max(1.2 + 4.5, DIODE.height + 0.4 + design.battery.thicknessMm) + 1;
+  const base = -depth - SHELL.floor, plateTop = 2.2, face = 3.6 + SHELL.bezel;
+  return { base, floorTop: base + SHELL.floor, pcbBottom: -PCB.thickness, split: 0, plateBottom: plateTop - SHELL_RULES.plate, plateTop, face, height: face - base };
+}
+
+/* M2 screws, 12 mm, pan head: up through the bottom piece and the board into the top piece,
+ * where they cut their own thread (no inserts, no soldering iron). */
+export const SCREW = { length: 12, boardHole: 2.2, clearance: 2.4, pilot: 1.6, head: 4.2, headDepth: 2.0, post: 5.5 } as const;
+
+/** Board mounting holes: the two top corners in the margin, and two in the chin, clear of the
+ * battery plug, the chin parts, the last row's diodes and the module's antenna keep-out. */
+export function mountingHoles(bounds: Bounds): Point[] {
+  const { minX, minY, maxX, maxY } = bounds;
+  return [
+    { x: minX + 4, y: minY + 4 }, { x: maxX - 4, y: minY + 4 },
+    { x: minX + 4, y: maxY - 19.5 }, { x: maxX - 4, y: maxY - 23 },
+  ];
+}
 
 /* The shell's long edges are rounded so it sits softly in the hand (first hand-model print,
  * 2026-10-28). The bottom edge rests in the palm, so it is rounded too; below 45° that round
@@ -120,6 +145,7 @@ export function partSpots(design: Design, bounds: Bounds): Record<string, Point>
     ...row(bottom - 16.5, ["U3", "C2", "C3", "R7", "R8", "LED2"]),
     ...row(bottom - 12.5, ["R5", "R6", "R1", "Q1", "R2"]),
     J3: { x: x0 + 5 * step + 4, y: bottom - 12.5 },
+    ...Object.fromEntries(mountingHoles(bounds).map((p, i) => [`H${i + 1}`, p])),
     LED1: { x: ledX, y: edge + 3 },
     U2: { x: rxX, y: edge + 4 },
     C1: { x: rxX + 5.5, y: edge + 3 },

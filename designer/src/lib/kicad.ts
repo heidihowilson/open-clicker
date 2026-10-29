@@ -38,8 +38,9 @@ const PIN_TO_PAD: Record<string, Record<string, string>> = {
   charger: { STAT: "1", VSS: "2", VBAT: "3", VDD: "4", PROG: "5" },
 };
 
-type Kind = "module" | "usb" | "charger" | "swd" | "battery" | "switch" | "diode" | "r" | "c" | "led" | "npn" | "tsop";
+type Kind = "hole" | "module" | "usb" | "charger" | "swd" | "battery" | "switch" | "diode" | "r" | "c" | "led" | "npn" | "tsop";
 function kindOf(p: Part): Kind {
+  if (/^H\d/.test(p.ref)) return "hole";
   if (p.ref === "U1") return "module";
   if (p.ref === "U3") return "charger";
   if (p.ref === "J1") return "usb";
@@ -102,8 +103,8 @@ export interface BoardSpec {
 }
 
 /* Everything but the switches, the IR receiver and the IR LED sits on the back. */
-const FRONT: Kind[] = ["switch", "tsop"];
-const ORIGIN: Kind[] = ["switch", "module", "usb"];
+const FRONT: Kind[] = ["switch", "tsop", "hole"];
+const ORIGIN: Kind[] = ["switch", "module", "usb", "hole"];
 
 export function boardSpec(design: Design, list: Netlist = netlist(design)): BoardSpec {
   const bounds = boardBounds(design);
@@ -148,6 +149,7 @@ const SYMBOLS: Record<Kind, SymDef> = {
     body: `(circle (center 1.27 0) (radius 2.8194) ${stroke()} (fill (type none))) (polyline (pts (xy 0.635 1.905) (xy 0.635 -1.905)) ${stroke(0.508)} (fill (type none))) (polyline (pts (xy 0.635 0.635) (xy 2.54 2.54)) ${stroke()} (fill (type none))) (polyline (pts (xy 0.635 -0.635) (xy 2.54 -2.54)) ${stroke()} (fill (type none))) (polyline (pts (xy -2.54 0) (xy 0.635 0)) ${stroke()} (fill (type none)))` },
   tsop: { id: "IR_Receiver", prefix: "U", pins: [{ num: "1", name: "OUT", x: -7.62, y: 2.54, angle: 0 }, { num: "2", name: "GND", x: -7.62, y: 0, angle: 0 }, { num: "3", name: "VS", x: -7.62, y: -2.54, angle: 0 }],
     body: `(rectangle (start -5.08 5.08) (end 5.08 -5.08) ${stroke()} (fill (type background)))` },
+  hole: { id: "MountingHole", prefix: "H", pins: [], bom: false, body: `(circle (center 0 0) (radius 1.27) ${stroke()} (fill (type none)))` },
   battery: box("Battery_JST_PH", "J", [["1", "+"], ["2", "-"], ["MP", "MP"]]),
   swd: { ...box("SWD_TC2030", "J", [["1", "VCC"], ["2", "SWDIO"], ["3", "RESET"], ["4", "SWCLK"], ["5", "GND"], ["6", "SWO"]]), bom: false },
   charger: box("MCP73831", "U", [["1", "STAT"], ["2", "VSS"], ["3", "VBAT"], ["4", "VDD"], ["5", "PROG"]]),
@@ -192,6 +194,7 @@ export function kicadSchematic(design: Design, list: Netlist = netlist(design), 
     U1: { x: 38.1, y: 152.4 }, J1: { x: 152.4, y: 165.1 }, R5: { x: 190.5, y: 165.1 }, R6: { x: 203.2, y: 165.1 },
     U3: { x: 241.3, y: 165.1 }, R7: { x: 279.4, y: 165.1 }, C2: { x: 292.1, y: 165.1 }, C3: { x: 304.8, y: 165.1 },
     R8: { x: 330.2, y: 165.1 }, LED2: { x: 355.6, y: 165.1 }, J2: { x: 152.4, y: 203.2 }, J3: { x: 203.2, y: 203.2 },
+    H1: { x: 254, y: 203.2 }, H2: { x: 266.7, y: 203.2 }, H3: { x: 279.4, y: 203.2 }, H4: { x: 292.1, y: 203.2 },
     LED1: { x: 76.2, y: 228.6 }, Q1: { x: 101.6, y: 228.6 }, R1: { x: 63.5, y: 228.6 }, R2: { x: 88.9, y: 241.3 }, U2: { x: 139.7, y: 228.6 }, C1: { x: 165.1, y: 228.6 },
   };
   for (const part of list.parts) {

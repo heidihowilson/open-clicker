@@ -47,7 +47,7 @@ export function handModel(m: ManifoldToplevel, r: Remote): HandModel {
   return { stl, volume: solid.volume(), size: [box.max[0] - box.min[0], box.max[1] - box.min[1], box.max[2] - box.min[2]], positions, indices: mesh.triVerts };
 }
 
-function binaryStl(verts: Float32Array, tris: Uint32Array, stride: number): Uint8Array<ArrayBuffer> {
+export function binaryStl(verts: Float32Array, tris: Uint32Array, stride: number): Uint8Array<ArrayBuffer> {
   const n = tris.length / 3, out = new ArrayBuffer(84 + n * 50), v = new DataView(out);
   const header = "Open Clicker mockup, mm";
   for (let i = 0; i < header.length; i++) v.setUint8(i, header.charCodeAt(i));

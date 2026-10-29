@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { capWidth, KEYCAPS, type Design, type Key } from "./design";
-import { boardBounds, EDGES, edgeInset, keyField, MODULE, partSpots, SHELL_RULES, USB_C, type Bounds } from "./geometry";
+import { boardBounds, EDGES, edgeInset, keyField, MODULE, partSpots, SHELL_RULES, stack, USB_C, type Bounds } from "./geometry";
 import { CHOC, DIODE, IR, MBK, PCB, SHELL } from "./parts-data";
 import { CHIPS } from "./chips";
 import { capColour, glyphUrl, legendOf } from "./actions";
@@ -352,46 +352,36 @@ function wordmark(width: number): THREE.Mesh {
 
 /* Three printed parts (brand book, Hardware → The shell): the shell (face and walls, open at
  * the back), the plate the switches clip into, and the lid. */
-export function buildShell(design: Design, bounds: Bounds, look?: Look): { lid: THREE.Group; shell: THREE.Group; plate: THREE.Group } {
+/* The two printed pieces (lib/enclosure.ts makes the printable versions): the top piece is
+ * the face, the keycap pockets and the switch plate in one; the bottom piece is the floor and
+ * walls, up to the top of the board. */
+export function buildShell(design: Design, bounds: Bounds, look?: Look): { lid: THREE.Group; shell: THREE.Group } {
   const cap = KEYCAPS[design.keycap];
-  const depth = PCB.thickness + Math.max(1.2 + 4.5, DIODE.height + 0.4 + design.battery.thicknessMm) + 1;
   const grow = SHELL_RULES.wall + SHELL.clearance, radius = SHELL_RULES.fillet;
-  const cx = (bounds.minX + bounds.maxX) / 2;
-
-  /* Lowest point and full height of the closed shell, for the edge profile. */
-  const base = -depth - SHELL.floor, height = 3.6 + SHELL.bezel - base;
+  const h = stack(design);
   const cavity = () => outline(bounds, SHELL.clearance, radius - grow);
   const lid = new THREE.Group();
-  lid.add(profiled(bounds, grow, radius, base, -depth, base, height, [], "shell"));
-  lid.add(profiled(bounds, grow, radius, -depth, -PCB.thickness, base, height, [cavity()], "shell"));
+  lid.add(profiled(bounds, grow, radius, h.base, h.floorTop, h.base, h.height, [], "shell"));
+  lid.add(profiled(bounds, grow, radius, h.floorTop, h.split, h.base, h.height, [cavity()], "shell"));
   /* USB-C opening, in line with the receptacle on the bottom edge. */
   const usbX = partSpots(design, bounds).J1!.x;
   lid.add(box(2 * USB_C.halfWidth + 0.6, 3.26 + 0.6, grow + 0.2, "slot", usbX, -PCB.thickness - 1.63, bounds.maxY + grow / 2));
   item(lid, "lid");
 
-  const plate = new THREE.Group();
-  const plateShape = outline(bounds, 0, radius - grow);
-  for (const key of design.keys) plateShape.holes.push(rectHole(key, SHELL_RULES.plateCutout, SHELL_RULES.plateCutout, 0.3));
-  plate.add(slab(plateShape, CHOC.bottom.height - SHELL_RULES.plate, SHELL_RULES.plate, "shell"));
-  item(plate, "plate");
-
   const shell = new THREE.Group();
-  shell.add(profiled(bounds, grow, radius, -PCB.thickness, 3.6, base, height, [cavity()], "shell"));
-  const faceMesh = profiled(bounds, grow, radius, 3.6, 3.6 + SHELL.bezel, base, height, design.keys.map((key) => rectHole(key, capWidth(key.w) + 1, cap.depthMm + 1)), "shell");
+  shell.add(profiled(bounds, grow, radius, h.split, h.plateTop, h.base, h.height, design.keys.map((key) => rectHole(key, SHELL_RULES.plateCutout, SHELL_RULES.plateCutout, 0.3)), "shell"));
+  const faceMesh = profiled(bounds, grow, radius, h.plateTop, h.face, h.base, h.height, design.keys.map((key) => rectHole(key, capWidth(key.w) + 1, cap.depthMm + 1)), "shell");
   faceMesh.userData.noEdges = true; /* triangulation edges around the key openings read as scratches */
   shell.add(faceMesh);
   if (!look) {
     const field = keyField(design);
     const mark = wordmark(30);
-    mark.position.set(field.minX + 15, 3.6 + SHELL.bezel + 0.02, bounds.maxY - SHELL_RULES.chin / 2 + 1);
+    mark.position.set(field.minX + 15, h.face + 0.02, bounds.maxY - SHELL_RULES.chin / 2 + 1);
     shell.add(mark);
   }
-  /* The IR window: a 6 × 2 mm slot centred on the top edge, only on IR builds. */
-  if (design.options.irTransmit || design.options.irReceive)
-    shell.add(box(6, 2, grow + 0.2, "slot", cx, 2, bounds.minY - grow / 2));
   item(shell, "shell");
-  if (look) for (const g of [lid, shell, plate]) tintRole(g, "shell", look.shell);
-  return { lid, shell, plate };
+  if (look) for (const g of [lid, shell]) tintRole(g, "shell", look.shell);
+  return { lid, shell };
 }
 
 /* Callout text for a layer: the BOM lines it holds, with quantity and unit price. */
@@ -421,7 +411,7 @@ export function buildAssembly(design: Design, look?: Look): THREE.Group {
   if (ir) ir.userData.part = { layer: 4, label: "IR", detail: describe(lines, ["ir-led", "ir-driver", "ir-receiver"]) };
   const parts = [
     wrap(shell.lid, 0, ["lid"]), wrap(buildBattery(design, bounds), 1, ["battery"]), wrap(buildController(design, bounds), 1.4, ["controller"]),
-    back, wrap(buildPcb(design, bounds), 3, ["pcb"]), wrap(shell.plate, 3.6, ["plate"]), switches, ir, wrap(shell.shell, 5, ["shell"]), caps,
+    back, wrap(buildPcb(design, bounds), 3, ["pcb"]), switches, ir, wrap(shell.shell, 5, ["shell"]), caps,
   ];
   for (const p of parts) if (p) root.add(p);
   return root;

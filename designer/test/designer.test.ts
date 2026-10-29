@@ -77,7 +77,8 @@ test("the BOM has one line per purchasable or printed unit", () => {
   const lines = bom(tile);
   const ids = lines.map((l) => l.id);
   expect(new Set(ids).size).toBe(ids.length);
-  expect(ids).toEqual(expect.arrayContaining(["shell", "plate", "lid"]));
+  expect(ids).toEqual(expect.arrayContaining(["shell", "lid", "screws"]));
+  expect(ids).not.toContain("plate");
   expect(lines.find((l) => l.id === "switch")?.qty).toBe(tile.keys.length);
   expect(bomTotal(lines)).toBeGreaterThan(15);
 });
