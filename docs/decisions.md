@@ -62,3 +62,16 @@ Only label a device supported after recording its exact model/software and testi
 
 - The project is named **Open Clicker**. The repository is `heidihowilson/open-clicker`. The domain `openremote.sethgholson.com`, the celld fleet `openremote` and the homelab deploy paths keep the old name.
 - The designer exports a KiCad project: a schematic and a board with every part placed and every pad on its net. The netlist, pin plan and part designators are implementation details and stay out of the UI.
+
+## Owner decisions, 2026-10-28 and 2026-10-29
+
+- **Shell edges.** A printed mockup with square edges dug into the hand. The shell now has a 4 mm round on the top edge, and a 4 mm round on the bottom edge that becomes a 45° bevel near the bed, so it prints without support. The owner confirmed that the second mockup feels much better. This profile is the default (`EDGES` in `designer/src/lib/geometry.ts`).
+- **Controller: nRF52840 on the u-blox BMD-340 module.** It replaces the XIAO ESP32-C6 for the product board. Reasons:
+  - a remote is idle almost all the time, and the nRF52840 can stay connected over Bluetooth LE on very little power;
+  - it has Bluetooth LE and Thread/Zigbee, so a Matter keypad stays possible;
+  - the BMD-340 carries radio certifications, which a sold Kit needs.
+  - Wi-Fi is given up. Firmware updates go over Bluetooth, and a companion app comes later, not now.
+- **The Kit needs no soldering.** The board arrives fully assembled by the factory. The buyer prints the shell, drops the board in, plugs in the battery, fits switches and caps, and flashes it. Every part on the board is chosen so a factory can place it.
+- **The owner's first board** will be this design, ordered after more design iterations. The ESP32 boards on hand stay for firmware experiments only.
+
+See [`hardware-sourcing.md`](hardware-sourcing.md) for the stock check and the open questions.
