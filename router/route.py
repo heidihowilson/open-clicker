@@ -55,6 +55,23 @@ while True:
     for t in dangling:
         board.Remove(t)
     removed += len(dangling)
+# Ground fill on both copper layers, added after routing so the router wires every ground pad
+# itself; the fill then adds copper around the routes and reaches the module's inner ground
+# pads. Solid pad connections: the factory reflows the board.
+gnd = board.FindNet("/GND")
+box = board.GetBoardEdgesBoundingBox()
+for layer in (pcbnew.F_Cu, pcbnew.B_Cu):
+    z = pcbnew.ZONE(board)
+    z.SetLayer(layer)
+    z.SetNet(gnd)
+    z.SetLocalClearance(pcbnew.FromMM(0.2)); z.SetMinThickness(pcbnew.FromMM(0.2))
+    z.SetPadConnection(pcbnew.ZONE_CONNECTION_FULL)
+    z.SetIslandRemovalMode(pcbnew.ISLAND_REMOVAL_MODE_ALWAYS)
+    poly = z.Outline(); poly.NewOutline()
+    for x, y in ((box.GetLeft(), box.GetTop()), (box.GetRight(), box.GetTop()), (box.GetRight(), box.GetBottom()), (box.GetLeft(), box.GetBottom())):
+        poly.Append(x, y)
+    board.Add(z)
+pcbnew.ZONE_FILLER(board).Fill(board.Zones())
 pcbnew.SaveBoard(pcb, board)
 
 report = pcb + ".drc.json"

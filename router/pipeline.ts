@@ -4,7 +4,9 @@ import { cp, mkdtemp, readdir, readFile, rm, writeFile, mkdir } from "node:fs/pr
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Design } from "../designer/src/lib/design";
+import { netlist as netlistOf } from "../designer/src/lib/netlist";
 import { kicadProject } from "../designer/src/lib/kicad";
+import { jlcBom, jlcCpl } from "./jlc";
 import { zip } from "../designer/src/lib/zip";
 
 const ROUTER = process.env.FREEROUTING ?? "/opt/freerouting/bin/freerouting";
@@ -23,7 +25,10 @@ async function run(cmd: string[], cwd: string): Promise<string> {
   const timer = setTimeout(() => p.kill(), (TIMEOUT_S + 60) * 1000);
   const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
   clearTimeout(timer);
-  if (code !== 0) throw new Error(err.trim().split("\n").pop() || `exit ${code}`);
+  if (code !== 0) {
+    const lines = err.trim().split("\n");
+    throw Object.assign(new Error(lines.pop() || `exit ${code}`), { detail: lines.slice(-8) });
+  }
   return out;
 }
 
@@ -43,8 +48,19 @@ export async function buildBoard(design: Design): Promise<{ zip: Uint8Array<Arra
     const gerberDir = join(dir, "gerbers"), previewDir = join(dir, "preview");
     await mkdir(gerberDir);
 
-    await run([PYTHON, BOARD_SCRIPT, spec, pcb, FOOTPRINTS], dir);
-    const routed = JSON.parse(lastLine(await run([PYTHON, ROUTE_SCRIPT, pcb, gerberDir, ROUTER, String(TIMEOUT_S)], dir)));
+    /* Freerouting is not deterministic. If a script crashes (not a failed check), build and
+     * route the board once more before giving up; the crash still shows in the server log. */
+    let routed: Record<string, unknown> | null = null;
+    for (let attempt = 1; !routed; attempt++) {
+      try {
+        await run([PYTHON, BOARD_SCRIPT, spec, pcb, FOOTPRINTS], dir);
+        routed = JSON.parse(lastLine(await run([PYTHON, ROUTE_SCRIPT, pcb, gerberDir, ROUTER, String(TIMEOUT_S)], dir)));
+      } catch (e) {
+        const timedOut = e instanceof Error && e.message.includes("ran out of time");
+        if (attempt >= 2 || timedOut) throw e;
+        console.error(`route attempt ${attempt} crashed: ${e instanceof Error ? e.message : String(e)}`, (e as { detail?: string[] }).detail ?? []);
+      }
+    }
     const gerbers = JSON.parse(lastLine(await run([PYTHON, VERIFY_SCRIPT, pcb, gerberDir, previewDir], dir)));
     const report = { ...routed, gerbers } as Report;
 
@@ -67,6 +83,12 @@ export async function buildBoard(design: Design): Promise<{ zip: Uint8Array<Arra
     for (const side of ["top", "bottom"]) files[`${project.name}/preview-${side}.svg`] = await readFile(join(previewDir, `preview-${side}.svg`), "utf8");
     files[`${project.name}/${project.name}-gerbers.zip`] = zip(gerberFiles);
     files[`${project.name}/CHECKS.txt`] = checks(report);
+    /* Placement comes from KiCad's own position export of the routed board. */
+    const pos = join(dir, "pos.csv");
+    await run(["kicad-cli", "pcb", "export", "pos", "--format", "csv", "--units", "mm", "--side", "both", "--output", pos, pcb], dir);
+    const list = netlistOf(design);
+    files[`${project.name}/${project.name}-bom.csv`] = jlcBom(list);
+    files[`${project.name}/${project.name}-cpl.csv`] = jlcCpl(list, await readFile(pos, "utf8"));
     files[`${project.name}/ORDER.txt`] = order(design, project.name, report);
     return { zip: zip(files), report, name: `${project.name}-routed.zip` };
   } finally {
@@ -74,7 +96,8 @@ export async function buildBoard(design: Design): Promise<{ zip: Uint8Array<Arra
   }
 }
 
-const lastLine = (out: string) => out.trim().split("\n").pop()!;
+/* The last JSON line: KiCad's Python bindings can print warnings after it. */
+const lastLine = (out: string) => out.trim().split("\n").reverse().find((l) => l.startsWith("{")) ?? "";
 
 function silkNote(r: Report): string {
   const n = Object.values(r.silk).reduce((a, b) => a + b, 0);
@@ -91,18 +114,33 @@ function checks(r: Report): string {
 5. gerbonara, an independent Gerber reader, read the files back: the outline is ${r.gerbers.outline_mm.join(" × ")} mm
    and all ${r.gerbers.holes} holes are in the drill files.
 
+Both copper layers carry a ground fill, added after routing, so every ground pad of the
+BMD-340 is joined, including its two inner ones.
+
 preview-top.svg and preview-bottom.svg show exactly what the board maker receives.
+${"-"}bom.csv and -cpl.csv are the parts list and placement file for JLCPCB assembly (ORDER.txt).
 `;
 }
 
 function order(d: Design, slug: string, r: Report): string {
   return `${d.name}, revision ${d.revision}, routed by the Open Clicker router in ${r.seconds} s.
 ${r.unrouted ? `WARNING: ${r.unrouted} connections are not routed. Finish them in KiCad before you order.\n` : "Every connection is routed and every check passed (CHECKS.txt).\n"}
-To order bare boards:
-1. Go to jlcpcb.com (or any fab that takes Gerbers) and choose "Order now".
+To order assembled boards from JLCPCB:
+1. Go to jlcpcb.com and choose "Order now".
 2. Upload ${slug}-gerbers.zip as it is. Do not unzip it.
-3. Keep the defaults: 2 layers, 1.6 mm FR-4. Any solder-mask colour works.
-4. Order 5 boards, the minimum.
+3. Keep the defaults: 2 layers, 1.6 mm FR-4. Order 5 boards, the minimum.
+4. Turn on "PCB Assembly". Assemble the BOTTOM side: every part except the IR parts sits there.
+   Choose "Economic" if JLCPCB offers it for this board; otherwise "Standard".
+5. Upload ${slug}-bom.csv as the BOM and ${slug}-cpl.csv as the placement (CPL) file.
+6. On the parts page, check that every line found its part. The Choc hot-swap socket
+   (C5333465) and the BMD-340 (C5456944) are often short; JLCPCB can pre-order them.
+   Ask for BMD-340-A-R-01 or newer, not -00 (docs/hardware-sourcing.md).
+7. On the placement preview, check every part sits on its pads and faces the right way;
+   rotate any that do not. Check the USB-C, the module and the battery plug most carefully.
+8. The IR LED and IR receiver (top side, through-hole) can be added as through-hole assembly,
+   or soldered by hand: they are the only through-hole parts.
+
+The board has no bootloader yet: flash it once over the TC2030 pad (J3) with an SWD probe.
 
 The kicad/ folder holds the same board, routed, for anyone who wants to change it in KiCad 9 or later.
 `;

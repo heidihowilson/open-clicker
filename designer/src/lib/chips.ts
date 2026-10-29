@@ -62,10 +62,6 @@ const AIN = new Set(["P0.02", "P0.03", "P0.04", "P0.05", "P0.28", "P0.29", "P0.3
 const BUDGET = ["P0.13", "P0.15", "P0.17", "P0.19", "P0.23", "P0.14", "P0.16", "P0.21", "P0.20", "P0.22", "P0.24",
   "P1.12", "P1.13", "P1.14", "P1.15", "P0.03", "P0.05", "P0.07", "P0.11",
   "P0.26", "P0.28", "P0.30", "P0.02", "P0.25", "P0.27", "P0.29", "P0.31"];
-/** Ground pads on the inner ring (data sheet figure 12). The module joins all its grounds
- * inside; the board leaves these two unwired until it has a ground fill to reach them. */
-export const BMD340_INNER_GND = ["18", "55"];
-
 export const CHIPS: Record<ChipId, Chip> = {
   "bmd-340": {
     id: "bmd-340",

@@ -86,3 +86,5 @@ See [`hardware-sourcing.md`](hardware-sourcing.md) for the stock check and the o
 - SWD comes out on a Tag-Connect TC2030 pad, for the one-time bootloader flash.
 - No copper is allowed in the antenna area at the module's end (data sheet figure 12); the antenna sits at the board's right edge in the chin.
 - The chin needs a board at least 58 mm wide, so 1- and 2-column remotes get a wider shell.
+- Both copper layers get a ground fill after routing; the router wires ground as an ordinary net first, because a fill made before routing was cut into unconnected pieces.
+- Routed bundles include JLCPCB assembly files (BOM and CPL).
