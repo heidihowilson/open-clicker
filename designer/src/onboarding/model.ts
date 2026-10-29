@@ -112,7 +112,7 @@ export function shellRect(r: Remote) {
 /* ---- buying ---- */
 export type TierId = "diy" | "kit" | "complete";
 export const TIERS: { id: TierId; name: string; line: string; from: Tier["id"] }[] = [
-  { id: "diy", name: "DIY", line: "Bare parts. You solder, you print.", from: "kit" },
+  { id: "diy", name: "DIY", line: "Our files, built by a board factory. You print the shell.", from: "kit" },
   { id: "kit", name: "Kit", line: "Assembled board. You print the shell.", from: "half-built" },
   { id: "complete", name: "Complete", line: "Ready out of the box.", from: "assembled" },
 ];
