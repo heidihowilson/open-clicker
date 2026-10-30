@@ -51,6 +51,7 @@ Device credentials, backups, logs and installed tools are excluded from Git.
 - [Open Clicker designer: the web app and its design file](docs/designer.md)
 - [Software plan: profiles, reconnect, sleep and pairing](docs/software-plan.md)
 - [Decisions and unresolved questions](docs/decisions.md)
+- [Direction: shared designs and group buys on Ethos and Base](docs/group-buy.md)
 - [Manufacturing and open release](docs/release-plan.md)
 
 Hardware source belongs in `hardware/`, firmware in `firmware/`, and editable enclosure models in `enclosures/`. Firmware is implemented; electrical CAD and mechanical CAD will follow the relevant component and interface decisions. The first successful reference test is the bedroom TCL BeyondTV4, running Android 11 in the supplied inventory. The living-room TCL QM6K and two Apple TVs whose generations remain to be identified are still untested.

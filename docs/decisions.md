@@ -8,6 +8,7 @@
 - Use existing chips; no custom silicon.
 - Separate physical inputs, logical actions, device profiles, and transport drivers.
 - Provide a working reference integration; community adapters extend supported devices.
+- Custom boards get built through group buys: a shared design URL, members commit to one board each, payments held in an escrow contract on Base, and trust through Ethos identity and reviews. Proof of concept for Ethos; Seth handles no money and forms no business. See [group-buy.md](group-buy.md) (2026-10-30).
 
 ## Initial engineering choices
 
